@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Left 4 Dead 2 - PC Port</title>
+<style>
+:root{
+  --bg:#090807; --bg2:#100e0c; --panel:rgba(20,17,15,.86); --line:#2b2521; --line2:#3a312b;
+  --bone:#e9e2d3; --text:#cfc7b8; --dim:#8a8276; --faint:#5a534a;
+  --blood:#a8120c; --blood2:#d4231a; --blood3:#ff3b2c; --hazard:#d8a321; --ok:#86b54d;
+  --display:"Bahnschrift","Bahnschrift Condensed","Impact","Arial Narrow",sans-serif;
+  --body:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --mx:30%; --my:20%;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 var(--body);overflow:hidden;user-select:none;-webkit-font-smoothing:antialiased}
+::selection{background:var(--blood);color:#fff}
+/* ---------- atmosphere ---------- */
+.atmo{position:fixed;inset:0;pointer-events:none;z-index:0}
+.atmo.light{background:radial-gradient(520px 420px at var(--mx) var(--my),rgba(255,236,200,.075),transparent 70%),
+  radial-gradient(1200px 700px at 78% 10%,rgba(140,20,12,.20),transparent 60%),
+  linear-gradient(180deg,#0d0b0a 0%,#070606 100%)}
+.atmo.stripes{opacity:.05;background:repeating-linear-gradient(115deg,transparent 0 46px,#fff 46px 47px)}
+.atmo.grain{opacity:.12;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");animation:grain 1.2s steps(6) infinite}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-3%)}60%{transform:translate(-2%,-1%)}80%{transform:translate(3%,3%)}100%{transform:translate(0,0)}}
+.atmo.vignette{background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.78) 100%)}
+.arrow-motif{position:fixed;right:-60px;bottom:-40px;width:520px;height:520px;opacity:.06;z-index:0;pointer-events:none;
+  background:conic-gradient(from 225deg at 50% 50%,var(--blood) 0 90deg,transparent 90deg);clip-path:polygon(0 38%,58% 38%,58% 14%,100% 50%,58% 86%,58% 62%,0 62%)}
+/* ---------- layout ---------- */
+.app{position:relative;z-index:1;display:grid;grid-template-columns:240px 1fr;height:100%}
+nav{border-right:1px solid var(--line);background:linear-gradient(180deg,rgba(14,12,10,.92),rgba(8,7,6,.96));display:flex;flex-direction:column;padding:26px 0 18px}
+.brand{padding:0 24px 26px}
+.brand .l4d{font:700 40px/0.86 var(--display);font-stretch:62%;letter-spacing:.5px;color:var(--bone);text-transform:uppercase;
+  -webkit-mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='120'><filter id='w'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/><feComponentTransfer><feFuncA type='discrete' tableValues='0 1 1 1 1 1 1 1'/></feComponentTransfer></filter><rect width='100%' height='100%' filter='url(%23w)'/></svg>");
+  text-shadow:0 0 18px rgba(212,35,26,.25)}
+.brand .l4d b{color:var(--blood2);font-weight:700}
+.brand .sub{margin-top:10px;font:600 11px/1.3 var(--display);letter-spacing:3.2px;color:var(--dim);text-transform:uppercase}
+.navlist{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.navbtn{all:unset;box-sizing:border-box;cursor:pointer;position:relative;padding:12px 24px 12px 30px;font:700 22px/1 var(--display);font-stretch:70%;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);transition:color .15s,background .15s}
+.navbtn:hover{color:var(--bone);background:rgba(255,255,255,.025)}
+.navbtn.active{color:var(--bone);background:linear-gradient(90deg,rgba(168,18,12,.28),transparent 85%)}
+.navbtn.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:6px;background:var(--blood2);clip-path:polygon(0 0,100% 12%,100% 88%,0 100%)}
+.navbtn .k{position:absolute;right:20px;top:15px;font:600 10px var(--body);letter-spacing:1px;color:var(--faint)}
+.navbtn:focus-visible{outline:2px solid var(--blood2);outline-offset:-2px}
+.navfoot{margin-top:auto;padding:0 24px;font-size:11px;color:var(--faint);line-height:1.6}
+.navfoot a{color:var(--dim);cursor:pointer;text-decoration:none;border-bottom:1px dotted var(--faint)}
+main{position:relative;overflow:auto;padding:34px 44px 90px}
+main::-webkit-scrollbar{width:10px}main::-webkit-scrollbar-thumb{background:var(--line2)}
+.page{display:none;max-width:980px;animation:in .28s ease-out}
+.page.active{display:block}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+h1{margin:0 0 4px;font:700 56px/0.95 var(--display);font-stretch:62%;letter-spacing:1px;text-transform:uppercase;color:var(--bone)}
+h1 .red{color:var(--blood2)}
+.lede{margin:0 0 26px;color:var(--dim);max-width:640px}
+h2{margin:0 0 12px;font:700 13px/1 var(--display);letter-spacing:3px;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:10px}
+h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line2),transparent)}
+.num{display:inline-grid;place-items:center;width:26px;height:26px;background:var(--blood);color:#fff;font:700 14px var(--display);clip-path:polygon(8% 0,100% 0,92% 100%,0 100%)}
+/* ---------- cards ---------- */
+.card{position:relative;background:var(--panel);border:1px solid var(--line);padding:20px 22px;margin-bottom:16px;backdrop-filter:blur(2px)}
+.card::before{content:"";position:absolute;inset:0;pointer-events:none;border-top:1px solid rgba(255,255,255,.04)}
+.card.torn{clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),96% 100%,88% calc(100% - 6px),74% 100%,61% calc(100% - 8px),45% 100%,30% calc(100% - 5px),14% 100%,0 calc(100% - 7px))}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.stat{display:flex;flex-direction:column;gap:6px}
+.stat .lab{font:600 11px var(--display);letter-spacing:2.4px;text-transform:uppercase;color:var(--faint)}
+.stat .val{font:700 26px/1 var(--display);font-stretch:75%;color:var(--bone);letter-spacing:.5px}
+.stat .val.ok{color:var(--ok)}.stat .val.bad{color:var(--blood3)}.stat .val.warn{color:var(--hazard)}
+.path{font:12.5px/1.4 Consolas,"Cascadia Mono",monospace;color:var(--text);word-break:break-all;user-select:text}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spacer{flex:1}
+/* ---------- buttons ---------- */
+.btn{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border:1px solid var(--line2);background:rgba(255,255,255,.03);
+  font:700 15px/1 var(--display);font-stretch:78%;letter-spacing:1.6px;text-transform:uppercase;color:var(--bone);transition:background .15s,border-color .15s,transform .05s}
+.btn:hover{background:rgba(255,255,255,.07);border-color:#56483f}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--blood2);outline-offset:2px}
+.btn[disabled]{opacity:.38;pointer-events:none}
+.btn.red{background:linear-gradient(180deg,var(--blood2),var(--blood));border-color:#ff5545;color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5) inset}
+.btn.red:hover{background:linear-gradient(180deg,var(--blood3),var(--blood2))}
+.btn.ghost{border-color:transparent;background:none;color:var(--dim)}.btn.ghost:hover{color:var(--bone);background:rgba(255,255,255,.04)}
+.play{all:unset;box-sizing:border-box;cursor:pointer;position:relative;display:block;width:100%;padding:30px 34px;margin:6px 0 18px;
+  background:linear-gradient(100deg,#8e0f0a,#c71f16 55%,#7c0c08);border:1px solid #ff4a3a;
+  clip-path:polygon(0 0,97% 0,100% 50%,97% 100%,0 100%,1.5% 50%);transition:filter .15s,transform .08s}
+.play:hover{filter:brightness(1.12) saturate(1.1)}
+.play:active{transform:scale(.995)}
+.play:focus-visible{outline:3px solid var(--bone);outline-offset:3px}
+.play .t{font:700 64px/0.9 var(--display);font-stretch:58%;letter-spacing:3px;color:#fff;text-transform:uppercase;text-shadow:0 2px 0 rgba(0,0,0,.35)}
+.play .s{margin-top:8px;font:600 12px var(--display);letter-spacing:3px;color:rgba(255,235,225,.8);text-transform:uppercase}
+.play.flicker .t{animation:flick 4.5s infinite}
+@keyframes flick{0%,92%,100%{opacity:1}93%{opacity:.55}94%{opacity:1}96%{opacity:.7}97%{opacity:1}}
+.play[disabled]{filter:grayscale(.9) brightness(.6);pointer-events:none}
+.play.running{background:linear-gradient(100deg,#2a2420,#3a302a);border-color:#5a4c42}
+/* ---------- forms ---------- */
+input[type=text]{all:unset;box-sizing:border-box;flex:1;min-width:260px;padding:10px 12px;border:1px solid var(--line2);background:rgba(0,0,0,.35);font:13px Consolas,monospace;color:var(--bone);user-select:text}
+input[type=text]:focus{border-color:var(--blood2)}
+select{appearance:none;padding:8px 34px 8px 12px;border:1px solid var(--line2);background:#15120f url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23d4231a' stroke-width='2' fill='none'/></svg>") no-repeat right 12px center;color:var(--bone);font:13px var(--body);min-width:220px;cursor:pointer}
+select:focus{outline:1px solid var(--blood2)}
+.choice{display:flex;gap:10px;flex-wrap:wrap}
+.opt{position:relative;cursor:pointer;flex:1;min-width:200px;padding:14px 16px;border:1px solid var(--line2);background:rgba(0,0,0,.25)}
+.opt input{position:absolute;opacity:0}
+.opt .t{font:700 16px var(--display);font-stretch:80%;letter-spacing:1.2px;text-transform:uppercase;color:var(--bone)}
+.opt .d{font-size:12px;color:var(--dim);margin-top:3px}
+.opt:has(input:checked){border-color:var(--blood2);background:linear-gradient(135deg,rgba(168,18,12,.22),rgba(0,0,0,.25))}
+.opt:has(input:checked)::after{content:"";position:absolute;top:10px;right:10px;width:9px;height:9px;background:var(--blood2);transform:rotate(45deg)}
+.opt:has(input:focus-visible){outline:2px solid var(--blood2)}
+/* switch */
+.set{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.set:last-child{border-bottom:0}
+.set .n{color:var(--bone)}
+.set .h{font-size:12px;color:var(--dim);margin-top:2px;max-width:560px}
+.sw{position:relative;width:46px;height:24px;cursor:pointer}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw span{position:absolute;inset:0;background:#2a2420;border:1px solid var(--line2);transition:.15s}
+.sw span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;background:var(--dim);transition:.15s}
+.sw input:checked+span{background:var(--blood);border-color:var(--blood2)}
+.sw input:checked+span::after{left:25px;background:#fff}
+.sw input:focus-visible+span{outline:2px solid var(--bone)}
+/* ---------- notices ---------- */
+.notice{display:flex;gap:12px;padding:12px 14px;margin:12px 0 0;border:1px solid var(--line2);background:rgba(0,0,0,.3);font-size:13px}
+.notice .ic{flex:none;width:20px;height:20px;display:grid;place-items:center;font:700 13px var(--display)}
+.notice.err{border-color:rgba(255,59,44,.55);background:rgba(120,10,6,.25);color:#ffd9d4}.notice.err .ic{background:var(--blood2);color:#fff;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.notice.ok{border-color:rgba(134,181,77,.45);background:rgba(50,80,20,.18);color:#dff0c8}.notice.ok .ic{background:var(--ok);color:#111;border-radius:50%}
+.notice.warn{border-color:rgba(216,163,33,.5);background:rgba(90,60,5,.22);color:#f4e2b5}.notice.warn .ic{background:var(--hazard);color:#111;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.seg{display:inline-flex;border:1px solid var(--line2);background:rgba(0,0,0,.3)}
+.seg button{all:unset;box-sizing:border-box;cursor:pointer;padding:8px 16px;font:700 13px/1 var(--display);letter-spacing:1.6px;text-transform:uppercase;color:var(--dim)}
+.seg button+button{border-left:1px solid var(--line2)}
+.seg button:hover{color:var(--bone)}
+.seg button.on{background:var(--blood);color:#fff}
+.seg button:focus-visible{outline:2px solid var(--bone);outline-offset:-2px}
+.pre-tag{display:inline-block;margin-left:8px;padding:2px 6px;font:700 10px var(--display);letter-spacing:1.5px;background:var(--hazard);color:#111;vertical-align:middle}
+.hazard{height:8px;margin:18px 0;background:repeating-linear-gradient(-45deg,var(--hazard) 0 12px,#111 12px 24px);opacity:.75}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;font-size:13px;margin-top:10px}
+.kv div:nth-child(odd){color:var(--faint);text-transform:uppercase;font:600 11px var(--display);letter-spacing:2px;padding-top:2px}
+/* ---------- progress ---------- */
+.prog{display:none}.prog.show{display:block}
+.bar{position:relative;height:16px;background:#1a1613;border:1px solid var(--line2);overflow:hidden;margin:10px 0 8px}
+.bar i{position:absolute;inset:0 auto 0 0;width:0;background:repeating-linear-gradient(-45deg,var(--blood2) 0 10px,var(--blood) 10px 20px);background-size:28px 28px;animation:mv .8s linear infinite;transition:width .2s}
+@keyframes mv{to{background-position:28px 0}}
+.prog .stage{font:700 20px var(--display);font-stretch:78%;letter-spacing:1px;color:var(--bone);text-transform:uppercase}
+.prog .detail{font:12px Consolas,monospace;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pct{font:700 34px/1 var(--display);font-stretch:70%;color:var(--blood3)}
+/* ---------- toast / modal ---------- */
+#toasts{position:fixed;right:22px;bottom:22px;display:flex;flex-direction:column;gap:8px;z-index:20}
+.toast{min-width:280px;max-width:440px;padding:12px 16px;background:#16120f;border:1px solid var(--line2);border-left:4px solid var(--blood2);box-shadow:0 10px 30px rgba(0,0,0,.6);animation:in .2s}
+.toast.ok{border-left-color:var(--ok)}
+.modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.7);z-index:30}
+.modal.show{display:grid}
+.modal .box{width:min(720px,92vw);max-height:80vh;overflow:auto;background:#120f0d;border:1px solid var(--blood);padding:24px}
+pre{white-space:pre-wrap;font:12px/1.4 Consolas,monospace;color:var(--text);background:#0b0a09;border:1px solid var(--line);padding:12px;max-height:44vh;overflow:auto;user-select:text}
+.status-strip{position:fixed;left:240px;right:0;bottom:0;height:34px;display:flex;align-items:center;gap:22px;padding:0 44px;border-top:1px solid var(--line);
+  background:rgba(8,7,6,.94);font:600 11px var(--display);letter-spacing:2px;text-transform:uppercase;color:var(--faint);z-index:2}
+.status-strip b{color:var(--dim);font-weight:600}
+.dot{display:inline-block;width:8px;height:8px;margin-right:7px;background:var(--faint);transform:rotate(45deg)}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--blood2)}.dot.run{background:var(--hazard);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.small{font-size:12px;color:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="atmo light"></div><div class="atmo stripes"></div><div class="arrow-motif"></div><div class="atmo grain"></div><div class="atmo vignette"></div>
+
+<div class="app">
+  <nav>
+    <div class="brand">
+      <div class="l4d">Left 4<br><b>Dead 2</b></div>
+      <div class="sub">PC Port &middot; Launcher</div>
+    </div>
+    <div class="navlist" role="tablist">
+      <button class="navbtn active" data-page="play">Play<span class="k">F5</span></button>
+      <button class="navbtn" data-page="install">Install</button>
+      <button class="navbtn" data-page="settings">Settings</button>
+      <button class="navbtn" data-page="updates">Updates</button>
+      <button class="navbtn" data-page="about">About</button>
+      <button class="navbtn" id="exitBtn">Exit</button>
+    </div>
+    <div class="navfoot">Launcher <span id="lv"></span><br>Unofficial fan project. Not affiliated with Valve.<br><a id="repoLink">GitHub repository</a></div>
+  </nav>
+
+  <main>
+    <!-- PLAY -->
+    <section class="page active" id="page-play">
+      <h1>The safehouse<br><span class="red">is open.</span></h1>
+      <p class="lede">Native PC build of the Xbox 360 release, recompiled from your own disc. Your game files never leave your machine.</p>
+      <button class="play flicker" id="playBtn"><div class="t" id="playT">Launch</div><div class="s" id="playS">Checking install&hellip;</div></button>
+      <div class="grid2">
+        <div class="card torn"><div class="stat"><span class="lab">Port patch</span><span class="val" id="stPatch">&mdash;</span><span class="small" id="stPatchDate"></span></div></div>
+        <div class="card torn"><div class="stat"><span class="lab">Game files</span><span class="val" id="stGame">&mdash;</span><span class="small" id="stGameErr"></span></div></div>
+      </div>
+      <div class="card">
+        <h2>Install location</h2>
+        <div class="path" id="stDir">Not installed</div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="changeDirBtn">Change location</button>
+          <button class="btn ghost" id="openDirBtn">Open folder</button>
+          <button class="btn ghost" id="openLogsBtn">Open logs</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>In game</h2>
+        <div class="kv">
+          <div>F2</div><div>Performance overlay (FPS, frame time, shaders, memory)</div>
+          <div>F4</div><div>Live settings panel</div>
+          <div>F3 / `</div><div>Runtime debug overlay / console</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSTALL -->
+    <section class="page" id="page-install">
+      <h1>Install</h1>
+      <p class="lede">Select your Left 4 Dead 2 Xbox 360 disc image. The launcher extracts the game files, then installs the PC port patch on top.</p>
+
+      <div class="card">
+        <h2><span class="num">1</span>Game disc</h2>
+        <div class="choice">
+          <label class="opt"><input type="radio" name="src" value="iso" checked><div class="t">Disc image (.iso)</div><div class="d">A 1:1 dump of your Xbox 360 disc</div></label>
+          <label class="opt"><input type="radio" name="src" value="folder"><div class="t">Extracted folder</div><div class="d">Already extracted files (contains default.xex)</div></label>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <input type="text" id="srcPath" placeholder="No disc image selected" readonly>
+          <button class="btn" id="pickSrcBtn">Browse&hellip;</button>
+        </div>
+        <div id="srcInfo"></div>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">2</span>Install location</h2>
+        <div class="row">
+          <input type="text" id="dirPath" placeholder="C:\Games\L4D2 PC Port">
+          <button class="btn" id="pickDirBtn">Browse&hellip;</button>
+        </div>
+        <div class="small" style="margin-top:8px">Needs about 8 GB free. Game files go into a <b>game</b> subfolder; the port and settings sit beside them.</div>
+      </div>
+
+      <div class="card">
+        <h2><span class="num">3</span>Port patch</h2>
+        <div class="choice">
+          <label class="opt"><input type="radio" name="patch" value="github" checked><div class="t">Latest from GitHub</div><div class="d" id="ghRepoTxt">Downloads the newest release</div></label>
+          <label class="opt"><input type="radio" name="patch" value="file"><div class="t">Patch file</div><div class="d">A downloaded l4d2-port-patch-*.zip</div></label>
+          <label class="opt"><input type="radio" name="patch" value="skip"><div class="t">Game files only</div><div class="d">Apply a patch later from Updates</div></label>
+        </div>
+        <div class="row" id="channelRow" style="margin-top:14px">
+          <span class="small">Update channel</span>
+          <div class="seg" data-channel-seg><button data-ch="release">Release</button><button data-ch="prerelease">Pre-release</button></div>
+          <span class="small" data-channel-help></span>
+        </div>
+        <div class="row" id="patchFileRow" style="margin-top:14px;display:none">
+          <input type="text" id="patchPath" placeholder="No patch selected" readonly>
+          <button class="btn" id="pickPatchBtn">Browse&hellip;</button>
+        </div>
+        <div id="patchInfo"></div>
+      </div>
+
+      <div class="row"><span class="spacer"></span><button class="btn red" id="installBtn" style="padding:14px 28px;font-size:18px">Begin install</button></div>
+
+      <div class="card prog" id="prog" style="margin-top:18px">
+        <div class="row"><div><div class="stage" id="pStage">Working</div><div class="detail" id="pDetail"></div></div><span class="spacer"></span><div class="pct" id="pPct">0%</div></div>
+        <div class="bar"><i id="pBar"></i></div>
+        <div class="row"><span class="spacer"></span><button class="btn ghost" id="cancelBtn">Cancel</button></div>
+        <div id="pResult"></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="page" id="page-settings">
+      <h1>Settings</h1>
+      <p class="lede">Saved to <span class="path">l4d2_settings.ini</span> in the install folder and applied when the game starts. Most can also be changed live in game with F4.</p>
+      <div id="settingsBody"></div>
+      <div class="row" style="margin-top:6px"><button class="btn ghost" id="resetSetBtn">Reset to defaults</button><span class="spacer"></span><button class="btn red" id="saveSetBtn">Save settings</button></div>
+      <div id="setMsg"></div>
+    </section>
+
+    <!-- UPDATES -->
+    <section class="page" id="page-updates">
+      <h1>Updates</h1>
+      <p class="lede">Port fixes ship as patch files. Installing a patch keeps your settings and backs up the previous version.</p>
+      <div class="card">
+        <div class="row" style="margin-bottom:16px">
+          <span class="small">Update channel</span>
+          <div class="seg" data-channel-seg><button data-ch="release">Release</button><button data-ch="prerelease">Pre-release</button></div>
+          <span class="small" data-channel-help></span>
+        </div>
+        <div class="grid2">
+          <div class="stat"><span class="lab">Installed</span><span class="val" id="upInst">&mdash;</span></div>
+          <div class="stat"><span class="lab">Latest on GitHub</span><span class="val" id="upLatest">&mdash;</span></div>
+        </div>
+        <div id="upNotes"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="checkUpBtn">Check for updates</button>
+          <button class="btn red" id="applyUpBtn" disabled>Install update</button>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="upFileBtn">Install patch from file&hellip;</button>
+          <button class="btn ghost" id="relBtn">Releases page</button>
+        </div>
+      </div>
+      <div class="card prog" id="prog2">
+        <div class="row"><div><div class="stage" id="p2Stage">Working</div><div class="detail" id="p2Detail"></div></div><span class="spacer"></span><div class="pct" id="p2Pct">0%</div></div>
+        <div class="bar"><i id="p2Bar"></i></div>
+        <div id="p2Result"></div>
+      </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="page" id="page-about">
+      <h1>About</h1>
+      <p class="lede">An unofficial PC port of the Xbox 360 version of Left 4 Dead 2, built by statically recompiling the game's PowerPC code to x86-64 with the ReXGlue toolchain.</p>
+      <div class="hazard"></div>
+      <div class="card">
+        <h2>Your disc, your files</h2>
+        <p>No game data is distributed with this launcher or its patches. You need your own Left 4 Dead 2 Xbox 360 disc image; the port loads the game's assets from the files extracted from it.</p>
+        <p class="small">Left 4 Dead, Left 4 Dead 2 and Valve are trademarks of Valve Corporation. This project is not affiliated with or endorsed by Valve or Microsoft.</p>
+      </div>
+      <div class="card">
+        <h2>Troubleshooting</h2>
+        <div class="kv">
+          <div>Crash log</div><div><span class="path">logs\crash.txt</span> in the install folder</div>
+          <div>Settings report</div><div><span class="path">logs\settings_applied.txt</span></div>
+          <div>Wrong colours</div><div>Settings &rsaquo; Render target emulation &rsaquo; Accurate (ROV)</div>
+          <div>Scrambled text</div><div>Settings &rsaquo; Text accuracy &rsaquo; Full</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="status-strip"><span><i class="dot" id="sDot"></i><b id="sTxt">Checking</b></span><span>Patch <b id="sPatch">&mdash;</b></span><span class="spacer"></span><span id="sDir"></span></div>
+<div id="toasts"></div>
+<div class="modal" id="modal"><div class="box"><h1 id="mTitle" style="font-size:40px">Game closed</h1><div id="mBody"></div><div class="row" style="margin-top:16px"><span class="spacer"></span><button class="btn" id="mLogs">Open logs</button><button class="btn red" id="mClose">Close</button></div></div></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let S={}, iso=null, settings=null, upd=null, jobTarget='install';
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const errMsg=e=>(e&&e.message)||String(e);
+function toast(msg,ok){const t=document.createElement('div');t.className='toast'+(ok?' ok':'');t.textContent=msg;$('#toasts').append(t);setTimeout(()=>t.remove(),5200)}
+function notice(el,kind,msg){$(el).innerHTML=msg?`<div class="notice ${kind}"><span class="ic">${kind==='ok'?'&#10003;':'!'}</span><div>${msg}</div></div>`:''}
+
+/* flashlight follows the cursor */
+addEventListener('mousemove',e=>{document.documentElement.style.setProperty('--mx',e.clientX+'px');document.documentElement.style.setProperty('--my',e.clientY+'px')});
+
+/* navigation */
+function go(p){$$('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.page===p));$$('.page').forEach(s=>s.classList.toggle('active',s.id==='page-'+p));if(p==='settings')loadSettings();if(p==='updates')renderUpd()}
+$$('.navbtn[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));
+$('#exitBtn').onclick=()=>exitLauncher();
+addEventListener('keydown',e=>{if(e.key==='F5'){e.preventDefault();$('#playBtn').click()}});
+
+/* state */
+window.onState=s=>{S=s;render()};
+async function refresh(){S=await getState();render()}
+function render(){
+  $('#lv').textContent='v'+S.launcher_version;
+  $('#ghRepoTxt').textContent='Downloads the newest release from github.com/'+S.repo;
+  const ready=S.port_installed&&S.game_installed;
+  $('#stPatch').textContent=S.patch_version?('v'+S.patch_version):(S.port_installed?'Unversioned':'Not installed');
+  $('#stPatch').className='val '+(S.patch_version?'ok':'bad');
+  $('#stPatchDate').textContent=S.patch_date?('Built '+S.patch_date.slice(0,10)):'';
+  $('#stGame').textContent=S.game_installed?'Ready':(S.install_dir?'Missing':'Not installed');
+  $('#stGame').className='val '+(S.game_installed?'ok':'bad');
+  $('#stGameErr').textContent=S.game_installed?'':(S.install_dir?S.game_error||'':'');
+  $('#stDir').textContent=S.install_dir||'Not installed - choose Install to set up the game.';
+  if(!$('#dirPath').value)$('#dirPath').value=S.install_dir||S.default_dir;
+  const pb=$('#playBtn');
+  pb.classList.toggle('running',S.running);pb.disabled=S.busy;
+  if(S.running){$('#playT').textContent='Running';$('#playS').textContent='Close the game window to return'}
+  else if(ready){$('#playT').textContent='Launch';$('#playS').textContent='Left 4 Dead 2 '+(S.patch_version?'· port v'+S.patch_version:'')}
+  else{$('#playT').textContent='Install';$('#playS').textContent='Game not installed yet - set it up from your disc image'}
+  $('#sDot').className='dot '+(S.running?'run':ready?'ok':'bad');
+  $('#sTxt').textContent=S.running?'In game':S.busy?'Working':ready?'Ready':'Not installed';
+  $('#sPatch').textContent=S.patch_version?('v'+S.patch_version):'none';
+  $('#sDir').textContent=S.install_dir||'';
+  $('#upInst').textContent=S.patch_version?('v'+S.patch_version):'none';
+  renderChannel();
+}
+function renderChannel(){
+  const ch=S.channel||'release';
+  $$('[data-channel-seg] button').forEach(b=>b.classList.toggle('on',b.dataset.ch===ch));
+  $$('[data-channel-help]').forEach(e=>e.textContent=ch==='prerelease'?'Newest builds, including test versions that may have bugs.':'Stable, tested builds only.');
+}
+$$('[data-channel-seg] button').forEach(b=>b.onclick=async()=>{
+  if(b.dataset.ch===S.channel)return;
+  try{S=await setChannel(b.dataset.ch);render();upd=null;$('#upLatest').textContent='—';$('#applyUpBtn').disabled=true;notice('#upNotes');
+    toast(b.dataset.ch==='prerelease'?'Following pre-releases':'Following stable releases',true);
+    if($('#page-updates').classList.contains('active'))$('#checkUpBtn').click();}
+  catch(e){toast(errMsg(e))}
+});
+$('#playBtn').onclick=async()=>{
+  if(S.running)return;
+  if(!(S.port_installed&&S.game_installed)){go('install');return}
+  try{await launch();toast('Launching Left 4 Dead 2...',true);refresh()}catch(e){toast(errMsg(e))}
+};
+$('#changeDirBtn').onclick=async()=>{const p=await pickInstallDir();if(!p)return;try{S=await setInstallDir(p);render();toast(S.port_installed?'Using install at '+p:'Location set - run Install to put the game there',S.port_installed)}catch(e){toast(errMsg(e))}};
+$('#openDirBtn').onclick=()=>openInstallFolder();
+$('#openLogsBtn').onclick=()=>openLogs();
+$('#repoLink').onclick=()=>openRepo();
+
+/* install */
+const srcMode=()=>$('input[name=src]:checked').value, patchMode=()=>$('input[name=patch]:checked').value;
+$$('input[name=src]').forEach(r=>r.onchange=()=>{iso=null;$('#srcPath').value='';$('#srcPath').placeholder=srcMode()==='iso'?'No disc image selected':'No folder selected';notice('#srcInfo')});
+$$('input[name=patch]').forEach(r=>r.onchange=()=>{$('#patchFileRow').style.display=patchMode()==='file'?'flex':'none';$('#channelRow').style.display=patchMode()==='github'?'flex':'none';notice('#patchInfo')});
+$('#pickSrcBtn').onclick=async()=>{
+  if(srcMode()==='iso'){
+    const p=await pickISO();if(!p)return;$('#srcPath').value=p;iso=null;
+    notice('#srcInfo','warn','Reading disc image&hellip;');
+    try{iso=await inspectISO(p);notice('#srcInfo','ok',`<b>Left 4 Dead 2 verified</b> &middot; title ID ${esc(iso.title_id)} &middot; ${iso.files} files &middot; ${esc(iso.total_gb)} to extract`);
+      if(!S.install_dir){const d=$('#dirPath');d.value=(p.slice(0,2))+'\\Games\\L4D2 PC Port'}}
+    catch(e){notice('#srcInfo','err',esc(errMsg(e)))}
+  }else{
+    try{const p=await pickGameFolder();if(!p)return;$('#srcPath').value=p;iso={folder:p};notice('#srcInfo','ok','<b>Game folder verified</b> &middot; Left 4 Dead 2 files found')}
+    catch(e){iso=null;notice('#srcInfo','err',esc(errMsg(e)))}
+  }
+};
+$('#pickDirBtn').onclick=async()=>{const p=await pickInstallDir();if(p)$('#dirPath').value=p};
+$('#pickPatchBtn').onclick=async()=>{const p=await pickPatchFile();if(!p)return;$('#patchPath').value=p;
+  try{const m=await readPatch(p);notice('#patchInfo','ok',`<b>${esc(m.name)} v${esc(m.version)}</b> &middot; ${m.files.length} files${m.notes?' &middot; '+esc(m.notes):''}`)}catch(e){notice('#patchInfo','err',esc(errMsg(e)))}};
+$('#installBtn').onclick=async()=>{
+  const req={iso_path:'',game_folder:'',install_dir:$('#dirPath').value.trim(),patch_from:patchMode(),patch_file:$('#patchPath').value};
+  if(!$('#srcPath').value){notice('#srcInfo','err','Select your disc image (or an extracted folder) first.');return}
+  if(srcMode()==='iso'){if(!iso){notice('#srcInfo','err','This disc image did not pass verification - pick a valid Left 4 Dead 2 ISO.');return}req.iso_path=$('#srcPath').value}
+  else req.game_folder=$('#srcPath').value;
+  if(req.patch_from==='file'&&!req.patch_file){notice('#patchInfo','err','Select a patch file, or choose another patch option.');return}
+  jobTarget='install';showProg(true);
+  try{await install(req)}catch(e){showProg(false);toast(errMsg(e));notice('#pResult','err',esc(errMsg(e)))}
+};
+$('#cancelBtn').onclick=()=>cancelJob();
+function showProg(on){const id=jobTarget==='install'?'#prog':'#prog2';$(id).classList.toggle('show',on);notice(jobTarget==='install'?'#pResult':'#p2Result');$('#installBtn').disabled=on}
+window.onProgress=p=>{
+  const pre=jobTarget==='install'?'#p':'#p2';
+  $(jobTarget==='install'?'#prog':'#prog2').classList.add('show');
+  $(pre+'Stage').textContent=p.stage||'';$(pre+'Detail').textContent=p.detail||'';
+  const pct=Math.max(0,Math.min(100,p.percent||0));$(pre+'Pct').textContent=Math.floor(pct)+'%';$(pre+'Bar').style.width=pct+'%';
+  if(p.done){$('#installBtn').disabled=false;
+    if(p.error){notice(pre+'Result','err',esc(p.error));toast(p.error)}
+    else{notice(pre+'Result','ok',jobTarget==='install'?'<b>Installed.</b> Head to Play to launch the game.':'<b>Update installed.</b>');toast(p.stage,true)}}
+};
+
+/* settings */
+async function loadSettings(){
+  try{settings=await getSettings()}catch(e){toast(errMsg(e));return}
+  const by={};settings.schema.forEach(s=>(by[s.section]=by[s.section]||[]).push(s));
+  let h='';for(const sec in by){h+=`<div class="card"><h2>${esc(sec)}</h2>`;
+    for(const s of by[sec]){const v=settings.values[s.key]??s.default, id='set_'+s.key;
+      let ctl='';if(s.type==='bool')ctl=`<label class="sw"><input type="checkbox" id="${id}" ${v==='true'?'checked':''}><span></span></label>`;
+      else ctl=`<select id="${id}">${(s.choices||[]).map(c=>`<option value="${esc(c[0])}" ${c[0]===v?'selected':''}>${esc(c[1])}</option>`).join('')}</select>`;
+      h+=`<div class="set"><div><div class="n">${esc(s.label)}</div>${s.help?`<div class="h">${esc(s.help)}</div>`:''}</div>${ctl}</div>`}
+    h+='</div>'}
+  $('#settingsBody').innerHTML=h;
+  if(!S.install_dir)notice('#setMsg','warn','Install the game first - settings are stored in the install folder.');else notice('#setMsg');
+}
+function collect(){const o={};settings.schema.forEach(s=>{const el=$('#set_'+s.key);o[s.key]=s.type==='bool'?String(el.checked):el.value});return o}
+$('#saveSetBtn').onclick=async()=>{try{await saveSettings(collect());notice('#setMsg','ok','Saved. Changes apply the next time the game starts.');toast('Settings saved',true)}catch(e){notice('#setMsg','err',esc(errMsg(e)))}};
+$('#resetSetBtn').onclick=async()=>{const d=await resetSettings();settings.values=d;const keep=settings;await loadSettingsFrom(keep)};
+async function loadSettingsFrom(st){settings=st;const vals=st.values;st.schema.forEach(s=>{const el=$('#set_'+s.key);if(!el)return;if(s.type==='bool')el.checked=vals[s.key]==='true';else el.value=vals[s.key]});notice('#setMsg','warn','Defaults restored - press Save to keep them.')}
+
+/* updates */
+function renderUpd(){$('#upInst').textContent=S.patch_version?('v'+S.patch_version):'none'}
+$('#checkUpBtn').onclick=async()=>{$('#upLatest').textContent='Checking...';notice('#upNotes');
+  try{upd=await checkUpdate();$('#upLatest').innerHTML=esc(upd.latest)+(upd.prerelease?'<span class="pre-tag">PRE-RELEASE</span>':'');$('#applyUpBtn').disabled=!upd.available||!S.install_dir;
+    notice('#upNotes',upd.available?'warn':'ok',upd.available?`<b>Update available</b> (${esc(upd.size_mb)})${upd.notes?'<br>'+esc(upd.notes).replace(/\n/g,'<br>'):''}`:'You have the latest patch.')}
+  catch(e){$('#upLatest').textContent='—';notice('#upNotes','err',esc(errMsg(e)))}};
+$('#applyUpBtn').onclick=async()=>{jobTarget='updates';showProg(true);try{await applyPatch('github','')}catch(e){showProg(false);notice('#upNotes','err',esc(errMsg(e)))}};
+$('#upFileBtn').onclick=async()=>{const p=await pickPatchFile();if(!p)return;try{const m=await readPatch(p);jobTarget='updates';showProg(true);await applyPatch('file',p)}catch(e){showProg(false);notice('#upNotes','err',esc(errMsg(e)))}};
+$('#relBtn').onclick=()=>openReleases();
+
+/* game exit */
+window.onGameExit=r=>{refresh();if(r.code===0&&!r.crash)return;
+  $('#mTitle').textContent=r.crash?'The game crashed':'Game exited';
+  $('#mBody').innerHTML=`<p class="small">Exit code ${r.code}. ${r.crash?'Crash details are below and in logs\\crash.txt.':''}</p>${r.crash?`<pre>${esc(r.crash)}</pre>`:''}`;
+  $('#modal').classList.add('show')};
+$('#mClose').onclick=()=>$('#modal').classList.remove('show');
+$('#mLogs').onclick=()=>openLogs();
+
+refresh();
+</script>
+</body>
+</html>

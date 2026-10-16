@@ -1,0 +1,24 @@
+# Never commit game data or anything built from it.
+*.iso
+*.xex
+*_360.dll
+assets/
+game/
+
+# Recompiler output (generated from the game's code - regenerate locally)
+port/generated/*/
+!port/generated/rexglue.cmake
+port/out/
+port/logs/
+port/dist/
+port/tools/
+port/testruns/
+port/src/stubs_backup/
+
+# Build products
+*.exe
+*.dll
+*.pdb
+*.lib
+*.zip
+launcher/build/
