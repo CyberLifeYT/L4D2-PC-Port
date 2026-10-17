@@ -12,7 +12,7 @@ if "%INI%"=="" set "INI=test_rov.ini"
 set "NAME=%INI:~0,-4%"
 set "SECS=%~2"
 if "%SECS%"=="" set "SECS=60"
-if not exist "%INI%" copy /y "%ROOT%\scripts\%INI%" . >NUL
+if exist "%ROOT%\scripts\%INI%" copy /y "%ROOT%\scripts\%INI%" . >NUL
 if exist logs\shots rmdir /s /q logs\shots
 del /q logs\perf_summary.csv 2>NUL
 start "" l4d2.exe --l4d2_settings_file="%CD%\%INI%" --log_file "logs\test_%NAME%.log" %EXTRA%

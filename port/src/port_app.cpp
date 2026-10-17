@@ -21,6 +21,11 @@
 #include "capture.h"
 #include "overlay.h"
 
+namespace l4d2 {
+void StartRawMouse();
+void StopRawMouse();
+}  // namespace l4d2
+
 REXCVAR_DEFINE_STRING(l4d2_settings_file, "", "L4D2 Debug",
                       "Settings file to apply instead of <exe_dir>\\l4d2_settings.ini");
 
@@ -156,6 +161,13 @@ void L4d2App::OnPreSetup(rex::RuntimeConfig& config) {
   InstallCrashLog();
   if (!config.graphics && config.gpu_plugin.empty()) config.gpu_plugin = "xenos";
   ApplySettingsFile();
+  // Raw mouse rides on the SDK's keyboard/mouse mode for keys, mouse buttons
+  // and cursor capture; the inputsystem hook then overwrites the right stick
+  // that mode produces with the raw-input value on every poll.
+  if (rex::cvar::GetFlagByName("l4d2_raw_mouse") == "true") {
+    rex::cvar::SetFlagByName("mnk_mode", "true");
+    rex::cvar::SetFlagByName("mnk_mouse", "true");
+  }
   // A log_level from the settings file resets every category; re-apply ours.
   l4d2::ApplyLogLevels();
 }
@@ -166,6 +178,7 @@ void L4d2App::OnPostSetup() {
     l4d2::StartCapture(rt->graphics_system()->presenter());
     l4d2::SetGraphicsSystem(rt->graphics_system());
   }
+  l4d2::StartRawMouse();
 }
 
 void L4d2App::OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) {
@@ -180,5 +193,6 @@ void L4d2App::OnShutdown() {
   rex::ui::UnregisterBind("bind_l4d2_overlay");
   rex::ui::UnregisterBind("bind_l4d2_screenshot");
   l4d2::StopCapture();
+  l4d2::StopRawMouse();
   perf_overlay_.reset();
 }

@@ -79,3 +79,8 @@ endif()
 if(TARGET l4d2_engine_360)
   target_sources(l4d2_engine_360 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/stubs/hook_engine.cpp")
 endif()
+
+# Raw mouse aiming: replaces pad 0's right stick in the game's XInputGetState.
+if(TARGET l4d2_inputsystem_360)
+  target_sources(l4d2_inputsystem_360 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/stubs/hook_inputsystem.cpp")
+endif()

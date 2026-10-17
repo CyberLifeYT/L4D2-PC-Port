@@ -35,6 +35,13 @@ The launcher's **Settings** page edits `l4d2_settings.ini` in the install folder
 - **Real occlusion queries**: Source's HDR auto-exposure depends on them.
 - Overlay sections, resolution scale (1x–3x), anisotropic filtering, FXAA, V-Sync, keyboard & mouse, log level.
 
+### PC features
+
+- **Raw mouse aiming** (Settings › Input): reads the mouse with Windows raw input (`WM_INPUT`, no pointer acceleration) and, every time the game polls the pad, converts the counts since the last poll into a right-stick value that is linear in mouse speed and starts just past the stick deadzone. The view turns by the same amount for the same hand movement at any frame rate. Sensitivity and invert-Y are in the launcher; `l4d2_mouse_deadzone` / `l4d2_mouse_counts_full` in `l4d2_settings.ini` fine-tune it. Keyboard and mouse buttons come from the keyboard & mouse mode, which is switched on with it.
+- **Frame-rate cap** (Settings › Display): the 360 build caps itself with the engine's `fps_max` ConVar (default 30, hidden from the console). The port writes the chosen value — 30, 60, 120, 144 or unlimited — into that ConVar every frame. The default is 60 with V-Sync off: menus run at 60 and gameplay currently runs at about 40–50 FPS on a GTX 1080 (it was held to 30 before). With V-Sync on, frames that miss 60 are held to an even 30. Game simulation runs on Source's fixed server tick and is interpolated for rendering, so physics, AI and particles keep their timing at any frame rate.
+- **Aspect ratio** (Settings › Display): the game is given a native 16:9, 16:10, 21:9 (1680x720) or 4:3 video mode instead of being stretched. Source lays the HUD and menus out for the actual shape, and movies stay 16:9 with side bars.
+- **Mods** (launcher › Mods): loose-file mods load ahead of the game's own files. Each mod is a folder in `game\mods\<name>\` laid out like `left4dead2\` (or containing a `zip0.360.zip`); the launcher puts enabled mods, in your chosen order, at the top of `gameinfo.xtx`'s search paths when you press Launch (the original is kept as `gameinfo.xtx.orig`). PC `.vpk` addons are unpacked to loose files when added — scripts, configs, text and 360-built maps work; PC-format models, textures and sounds need their 360 versions.
+
 ### Updates
 
 **Updates → Check for updates** compares your installed patch with the newest build on your chosen channel (**Release** or **Pre-release**, switchable on the Updates page). Installing a patch verifies every file's SHA-256 before anything is replaced, backs up the files it replaces to `.backup\<old version>`, and keeps your settings.
@@ -76,6 +83,8 @@ port\scripts\run_dev.bat        :: run against ..\assets with a log in port\logs
 port\scripts\test_map.bat       :: windowed 3-minute run straight into Dead Center; screenshots +
                                 :: perf_summary.csv land in port\testruns\
 port\scripts\perf_matrix.bat    :: the same run with several settings files, for A/B comparisons
+port\scripts\feature_tests.bat  :: raw mouse / frame-rate / 21:9 runs; an autopilot presses START/A
+                                :: to reach a campaign and a synthetic mouse sweep turns the camera
 ```
 
 ### Making a patch release
@@ -90,7 +99,7 @@ Publishing uses your GitHub login: `GITHUB_TOKEN`/`GH_TOKEN` if set, otherwise t
 
 ## Status
 
-Boots, intro movies, menus, text and gameplay work, with correct lighting on the accurate (ROV) render path. The game runs at the Xbox 360's 30 FPS cap; short dips happen while new shaders compile (the shader cache removes them on later runs). Known issues are tracked in [Issues](../../issues).
+Boots, intro movies, menus, text and gameplay work, with correct lighting on the accurate (ROV) render path. Gameplay runs at roughly 40–50 FPS uncapped (60 in menus) on a GTX 1080; short dips happen while new shaders compile (the shader cache removes them on later runs). Known issues are tracked in [Issues](../../issues).
 
 ## Legal
 

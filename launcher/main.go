@@ -289,6 +289,9 @@ func (a *App) Launch() error {
 	if err := ValidateGameFolder(filepath.Join(dir, "game")); err != nil {
 		return fmt.Errorf("game files are missing or incomplete (%v) - run Install again", err)
 	}
+	if _, err := ApplyMods(dir); err != nil {
+		return fmt.Errorf("could not apply mods: %v (disable them on the Mods page)", err)
+	}
 	if !hasVCRuntime(dir) {
 		openURL("https://aka.ms/vs/17/release/vc_redist.x64.exe")
 		return errors.New("the Microsoft Visual C++ 2015-2022 runtime (x64) is not installed. Your browser is downloading it now - run the installer, then press Launch again")
@@ -350,68 +353,6 @@ func tail(s string, n int) string {
 }
 
 // ---------------------------------------------------------------- helpers
-func copyTree(src, dst string, cancel *atomic.Bool, p ProgressFn) error {
-	var files []string
-	var total, done int64
-	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			files = append(files, path)
-			total += info.Size()
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if free, err := freeBytes(filepath.Dir(dst)); err == nil && free < uint64(total) {
-		return fmt.Errorf("not enough free space: need %s", gb(total))
-	}
-	last := time.Now()
-	for i, f := range files {
-		if cancel.Load() {
-			return errors.New("cancelled")
-		}
-		rel, _ := filepath.Rel(src, f)
-		out := filepath.Join(dst, rel)
-		st, _ := os.Stat(f)
-		if ost, err := os.Stat(out); err == nil && ost.Size() == st.Size() {
-			done += st.Size()
-			continue
-		}
-		os.MkdirAll(filepath.Dir(out), 0o755)
-		if err := copyFile(f, out); err != nil {
-			return err
-		}
-		done += st.Size()
-		if time.Since(last) > 120*time.Millisecond {
-			last = time.Now()
-			p(Progress{Stage: "Copying game files", Detail: fmt.Sprintf("%d / %d  %s", i+1, len(files), rel), Percent: 100 * float64(done) / float64(max64(total, 1))})
-		}
-	}
-	return nil
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.Create(dst + ".part")
-	if err != nil {
-		return err
-	}
-	if _, err := out.ReadFrom(in); err != nil {
-		out.Close()
-		return err
-	}
-	out.Close()
-	os.Remove(dst)
-	return os.Rename(dst+".part", dst)
-}
 
 // ---------------------------------------------------------------- bindings
 func (a *App) bind() {
@@ -460,6 +401,40 @@ func (a *App) bind() {
 		p, _ := openFileDialog(a.hwnd(), "Select an L4D2 port patch (.zip)",
 			[]string{"L4D2 port patch (*.zip)", "*.zip"}, "")
 		return p
+	}))
+	must(w.Bind("listMods", func() ([]ModInfo, error) { return ListMods(a.cfg.InstallDir) }))
+	must(w.Bind("saveMods", func(m []ModInfo) error {
+		if a.cfg.InstallDir == "" {
+			return errors.New("install the game first")
+		}
+		return SaveMods(a.cfg.InstallDir, m)
+	}))
+	must(w.Bind("addModFolder", func() (string, error) {
+		if a.cfg.InstallDir == "" {
+			return "", errors.New("install the game first")
+		}
+		p, ok := folderDialog(a.hwnd(), "Select a mod folder (laid out like left4dead2: materials, models, scripts, ...)")
+		if !ok {
+			return "", nil
+		}
+		return AddMod(a.cfg.InstallDir, p)
+	}))
+	must(w.Bind("addModFile", func() (string, error) {
+		if a.cfg.InstallDir == "" {
+			return "", errors.New("install the game first")
+		}
+		p, ok := openFileDialog(a.hwnd(), "Select a mod (.vpk addon, .zip of loose files, or .360.zip pack)",
+			[]string{"Mods (*.vpk;*.zip)", "*.vpk;*.zip", "All files", "*.*"}, "")
+		if !ok {
+			return "", nil
+		}
+		return AddMod(a.cfg.InstallDir, p)
+	}))
+	must(w.Bind("openModsFolder", func() {
+		if a.cfg.InstallDir != "" {
+			os.MkdirAll(modsDir(a.cfg.InstallDir), 0o755)
+			openInExplorer(modsDir(a.cfg.InstallDir))
+		}
 	}))
 	must(w.Bind("readPatch", func(p string) (*PatchManifest, error) { return ReadPatchManifest(p) }))
 	must(w.Bind("install", func(r InstallRequest) error { return a.Install(r) }))

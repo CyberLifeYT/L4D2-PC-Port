@@ -314,3 +314,98 @@ func TestPublish(t *testing.T) {
 		t.Fatalf("created=%d uploaded=%d deleted=%d auth=%q", created, uploaded, deleted, gotAuth)
 	}
 }
+
+func buildVPK(t *testing.T, path string, files map[string][]byte) {
+	t.Helper()
+	type ent struct {
+		ext, dir, name string
+		data           []byte
+	}
+	var tree bytes.Buffer
+	byExt := map[string]map[string][]ent{}
+	for p, d := range files {
+		dir, file := filepath.Split(p)
+		dir = strings.TrimSuffix(dir, "/")
+		if dir == "" {
+			dir = " "
+		}
+		ext := filepath.Ext(file)
+		name := strings.TrimSuffix(file, ext)
+		ext = strings.TrimPrefix(ext, ".")
+		if byExt[ext] == nil {
+			byExt[ext] = map[string][]ent{}
+		}
+		byExt[ext][dir] = append(byExt[ext][dir], ent{ext, dir, name, d})
+	}
+	var data bytes.Buffer
+	for ext, dirs := range byExt {
+		tree.WriteString(ext + "\x00")
+		for dir, es := range dirs {
+			tree.WriteString(dir + "\x00")
+			for _, e := range es {
+				tree.WriteString(e.name + "\x00")
+				binary.Write(&tree, binary.LittleEndian, struct {
+					CRC       uint32
+					Pre, Arch uint16
+					Off, Len  uint32
+					Term      uint16
+				}{0, 0, 0x7FFF, uint32(data.Len()), uint32(len(e.data)), 0xFFFF})
+				data.Write(e.data)
+			}
+			tree.WriteString("\x00")
+		}
+		tree.WriteString("\x00")
+	}
+	tree.WriteString("\x00")
+	var out bytes.Buffer
+	binary.Write(&out, binary.LittleEndian, []uint32{0x55AA1234, 1, uint32(tree.Len())})
+	out.Write(tree.Bytes())
+	out.Write(data.Bytes())
+	os.WriteFile(path, out.Bytes(), 0o644)
+}
+
+func TestMods(t *testing.T) {
+	inst := t.TempDir()
+	gdir := filepath.Join(inst, "game", "left4dead2")
+	os.MkdirAll(gdir, 0o755)
+	orig := "\"GameInfo\"\r\n{\r\n\tFileSystem\r\n\t{\r\n\t\tSearchPaths\r\n\t\t{\r\n\t\t\tGame\t|gameinfo_path|.\r\n\t\t\tGame\tleft4dead2\r\n\t\t}\r\n\t}\r\n}\r\n"
+	os.WriteFile(filepath.Join(gdir, "gameinfo.xtx"), []byte(orig), 0o644)
+	vpk := filepath.Join(t.TempDir(), "My Addon.vpk")
+	buildVPK(t, vpk, map[string][]byte{"scripts/vscripts/test.nut": []byte("printl(1)"), "addoninfo.txt": []byte("info"), "materials/a/b.vmt": []byte("vmt")})
+	name, err := AddMod(inst, vpk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(modsDir(inst), name, "scripts", "vscripts", "test.nut")); string(b) != "printl(1)" {
+		t.Fatal("vpk not extracted")
+	}
+	folder := filepath.Join(t.TempDir(), "Loose")
+	os.MkdirAll(filepath.Join(folder, "maps"), 0o755)
+	os.WriteFile(filepath.Join(folder, "maps", "x.bsp"), []byte("bsp"), 0o644)
+	if _, err := AddMod(inst, folder); err != nil {
+		t.Fatal(err)
+	}
+	mods, _ := ListMods(inst)
+	if len(mods) != 2 || mods[0].Name != "Loose" || !mods[1].Enabled {
+		t.Fatalf("mods %+v", mods)
+	}
+	enabled, err := ApplyMods(inst)
+	if err != nil || len(enabled) != 2 {
+		t.Fatal(enabled, err)
+	}
+	gi, _ := os.ReadFile(filepath.Join(gdir, "gameinfo.xtx"))
+	s := string(gi)
+	if !strings.Contains(s, "Game\t\t\t\tmods/Loose\r\n") || strings.Index(s, "mods/Loose") > strings.Index(s, "mods/My Addon") ||
+		strings.Index(s, "mods/My Addon") > strings.Index(s, "|gameinfo_path|") {
+		t.Fatalf("bad gameinfo:\n%s", s)
+	}
+	mods[0].Enabled, mods[1].Enabled = false, false
+	SaveMods(inst, mods)
+	ApplyMods(inst)
+	if gi, _ := os.ReadFile(filepath.Join(gdir, "gameinfo.xtx")); string(gi) != orig {
+		t.Fatal("gameinfo not restored")
+	}
+	if _, err := ExtractVPK(filepath.Join(gdir, "gameinfo.xtx"), t.TempDir()); err == nil {
+		t.Fatal("non-vpk accepted")
+	}
+}

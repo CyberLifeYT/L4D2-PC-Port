@@ -128,6 +128,11 @@ select:focus{outline:1px solid var(--blood2)}
 .seg button.on{background:var(--blood);color:#fff}
 .seg button:focus-visible{outline:2px solid var(--bone);outline-offset:-2px}
 .pre-tag{display:inline-block;margin-left:8px;padding:2px 6px;font:700 10px var(--display);letter-spacing:1.5px;background:var(--hazard);color:#111;vertical-align:middle}
+.mod{display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--line);background:rgba(0,0,0,.25);margin-bottom:6px}
+.mod .nm{color:var(--bone);font:700 16px var(--display);font-stretch:85%;letter-spacing:.6px}
+.mod .meta{font-size:12px;color:var(--dim)}
+.mod .ord button{all:unset;cursor:pointer;padding:4px 9px;color:var(--dim);border:1px solid var(--line2);margin-left:4px}
+.mod .ord button:hover{color:var(--bone)}
 .hazard{height:8px;margin:18px 0;background:repeating-linear-gradient(-45deg,var(--hazard) 0 12px,#111 12px 24px);opacity:.75}
 .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;font-size:13px;margin-top:10px}
 .kv div:nth-child(odd){color:var(--faint);text-transform:uppercase;font:600 11px var(--display);letter-spacing:2px;padding-top:2px}
@@ -170,6 +175,7 @@ pre{white-space:pre-wrap;font:12px/1.4 Consolas,monospace;color:var(--text);back
       <button class="navbtn active" data-page="play">Play<span class="k">F5</span></button>
       <button class="navbtn" data-page="install">Install</button>
       <button class="navbtn" data-page="settings">Settings</button>
+      <button class="navbtn" data-page="mods">Mods</button>
       <button class="navbtn" data-page="updates">Updates</button>
       <button class="navbtn" data-page="about">About</button>
       <button class="navbtn" id="exitBtn">Exit</button>
@@ -271,6 +277,27 @@ pre{white-space:pre-wrap;font:12px/1.4 Consolas,monospace;color:var(--text);back
       <div id="setMsg"></div>
     </section>
 
+    <!-- MODS -->
+    <section class="page" id="page-mods">
+      <h1>Mods</h1>
+      <p class="lede">Loose-file mods load before the game's own files. Each mod is a folder laid out like <span class="path">left4dead2</span> (materials, models, scripts, sound, maps, resource) or a <span class="path">zip0.360.zip</span> pack. Higher in the list wins.</p>
+      <div class="card">
+        <div class="row" style="margin-bottom:14px">
+          <button class="btn" id="modAddFolder">Add folder&hellip;</button>
+          <button class="btn" id="modAddFile">Add .vpk / .zip&hellip;</button>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="modOpen">Open mods folder</button>
+        </div>
+        <div id="modList"></div>
+        <div class="row" style="margin-top:14px"><span class="small" id="modHint"></span><span class="spacer"></span><button class="btn red" id="modSave">Save load order</button></div>
+        <div id="modMsg"></div>
+      </div>
+      <div class="card">
+        <h2>Compatibility</h2>
+        <p class="small">This is the Xbox 360 build of the engine. PC <span class="path">.vpk</span> addons are unpacked into loose files when you add them: scripts, configs, text, VScripts and 360-built maps work. PC-format models, textures and sounds (<span class="path">.mdl/.vtf/.wav</span>) generally need their 360 versions (<span class="path">.360.mdl/.360.vtf/.360.wav</span>). Changes apply the next time you press Launch.</p>
+      </div>
+    </section>
+
     <!-- UPDATES -->
     <section class="page" id="page-updates">
       <h1>Updates</h1>
@@ -340,7 +367,7 @@ function notice(el,kind,msg){$(el).innerHTML=msg?`<div class="notice ${kind}"><s
 addEventListener('mousemove',e=>{document.documentElement.style.setProperty('--mx',e.clientX+'px');document.documentElement.style.setProperty('--my',e.clientY+'px')});
 
 /* navigation */
-function go(p){$$('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.page===p));$$('.page').forEach(s=>s.classList.toggle('active',s.id==='page-'+p));if(p==='settings')loadSettings();if(p==='updates')renderUpd()}
+function go(p){$$('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.page===p));$$('.page').forEach(s=>s.classList.toggle('active',s.id==='page-'+p));if(p==='settings')loadSettings();if(p==='updates')renderUpd();if(p==='mods')loadMods()}
 $$('.navbtn[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));
 $('#exitBtn').onclick=()=>exitLauncher();
 addEventListener('keydown',e=>{if(e.key==='F5'){e.preventDefault();$('#playBtn').click()}});
@@ -439,7 +466,7 @@ async function loadSettings(){
   try{settings=await getSettings()}catch(e){toast(errMsg(e));return}
   const by={};settings.schema.forEach(s=>(by[s.section]=by[s.section]||[]).push(s));
   let h='';for(const sec in by){h+=`<div class="card"><h2>${esc(sec)}</h2>`;
-    for(const s of by[sec]){const v=settings.values[s.key]??s.default, id='set_'+s.key;
+    for(const s of by[sec]){if(s.hidden)continue;const v=settings.values[s.key]??s.default, id='set_'+s.key;
       let ctl='';if(s.type==='bool')ctl=`<label class="sw"><input type="checkbox" id="${id}" ${v==='true'?'checked':''}><span></span></label>`;
       else ctl=`<select id="${id}">${(s.choices||[]).map(c=>`<option value="${esc(c[0])}" ${c[0]===v?'selected':''}>${esc(c[1])}</option>`).join('')}</select>`;
       h+=`<div class="set"><div><div class="n">${esc(s.label)}</div>${s.help?`<div class="h">${esc(s.help)}</div>`:''}</div>${ctl}</div>`}
@@ -447,10 +474,25 @@ async function loadSettings(){
   $('#settingsBody').innerHTML=h;
   if(!S.install_dir)notice('#setMsg','warn','Install the game first - settings are stored in the install folder.');else notice('#setMsg');
 }
-function collect(){const o={};settings.schema.forEach(s=>{const el=$('#set_'+s.key);o[s.key]=s.type==='bool'?String(el.checked):el.value});return o}
+function collect(){const o={};settings.schema.forEach(s=>{const el=$('#set_'+s.key);if(!el){o[s.key]=settings.values[s.key]??s.default;return}o[s.key]=s.type==='bool'?String(el.checked):el.value});return o}
 $('#saveSetBtn').onclick=async()=>{try{await saveSettings(collect());notice('#setMsg','ok','Saved. Changes apply the next time the game starts.');toast('Settings saved',true)}catch(e){notice('#setMsg','err',esc(errMsg(e)))}};
 $('#resetSetBtn').onclick=async()=>{const d=await resetSettings();settings.values=d;const keep=settings;await loadSettingsFrom(keep)};
 async function loadSettingsFrom(st){settings=st;const vals=st.values;st.schema.forEach(s=>{const el=$('#set_'+s.key);if(!el)return;if(s.type==='bool')el.checked=vals[s.key]==='true';else el.value=vals[s.key]});notice('#setMsg','warn','Defaults restored - press Save to keep them.')}
+
+/* mods */
+let mods=[];
+async function loadMods(){try{mods=await listMods()}catch(e){mods=[];notice('#modMsg','warn',esc(errMsg(e)))}renderMods()}
+function renderMods(){
+  $('#modHint').textContent=mods.length?`${mods.filter(m=>m.enabled).length} of ${mods.length} enabled`:'';
+  $('#modList').innerHTML=mods.length?mods.map((m,i)=>`<div class="mod"><label class="sw"><input type="checkbox" data-i="${i}" ${m.enabled?'checked':''}><span></span></label><div><div class="nm">${esc(m.name)}</div><div class="meta">${m.files} files &middot; ${esc(m.size_mb)}</div></div><div class="ord"><button data-up="${i}" title="Load earlier">&#9650;</button><button data-dn="${i}" title="Load later">&#9660;</button></div><span class="small">#${i+1}</span></div>`).join(''):'<p class="small">No mods yet. Add a folder or a .vpk / .zip, or drop folders into the mods folder.</p>';
+  $$('#modList input[data-i]').forEach(c=>c.onchange=()=>{mods[+c.dataset.i].enabled=c.checked;renderMods()});
+  $$('#modList [data-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.up;if(i>0){[mods[i-1],mods[i]]=[mods[i],mods[i-1]];renderMods()}});
+  $$('#modList [data-dn]').forEach(b=>b.onclick=()=>{const i=+b.dataset.dn;if(i<mods.length-1){[mods[i+1],mods[i]]=[mods[i],mods[i+1]];renderMods()}});
+}
+$('#modSave').onclick=async()=>{try{await saveMods(mods);notice('#modMsg','ok','Saved. Applied the next time you press Launch.');toast('Mods saved',true)}catch(e){notice('#modMsg','err',esc(errMsg(e)))}};
+$('#modAddFolder').onclick=async()=>{try{const n=await addModFolder();if(n){toast('Added '+n,true);loadMods()}}catch(e){notice('#modMsg','err',esc(errMsg(e)))}};
+$('#modAddFile').onclick=async()=>{try{const n=await addModFile();if(n){toast('Added '+n,true);loadMods()}}catch(e){notice('#modMsg','err',esc(errMsg(e)))}};
+$('#modOpen').onclick=()=>openModsFolder();
 
 /* updates */
 function renderUpd(){$('#upInst').textContent=S.patch_version?('v'+S.patch_version):'none'}

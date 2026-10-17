@@ -20,19 +20,25 @@ type Setting struct {
 	Choices [][2]string `json:"choices,omitempty"` // value, label
 	Min     int         `json:"min,omitempty"`
 	Max     int         `json:"max,omitempty"`
+	Hidden  bool        `json:"hidden,omitempty"` // written to the ini, not shown
 }
 
 var SettingsSchema = []Setting{
 	// Display
 	{Key: "fullscreen", Section: "Display", Label: "Fullscreen", Type: "bool", Default: "true"},
-	{Key: "vsync", Section: "Display", Label: "V-Sync", Help: "Locks presentation to the display refresh; off reduces input latency but can tear.", Type: "bool", Default: "true"},
+	{Key: "vsync", Section: "Display", Label: "V-Sync", Help: "On holds the game to the display rate: when it cannot reach 60 it drops to an even 30. Off lets it run anywhere in between (around 40-50 in gameplay on a GTX 1080), with possible tearing.", Type: "bool", Default: "false"},
 	{Key: "resolution_scale", Section: "Display", Label: "Internal resolution", Help: "Renders the game above its native 1280x720. Higher values cost GPU time.", Type: "choice", Default: "1",
 		Choices: [][2]string{{"1", "1x  (1280x720, native)"}, {"2", "2x  (2560x1440)"}, {"3", "3x  (3840x2160)"}}},
 	{Key: "anisotropic_override", Section: "Display", Label: "Texture filtering", Type: "choice", Default: "5",
 		Choices: [][2]string{{"-1", "Game default"}, {"0", "Off"}, {"2", "2x anisotropic"}, {"3", "4x anisotropic"}, {"4", "8x anisotropic"}, {"5", "16x anisotropic"}}},
 	{Key: "swap_post_effect", Section: "Display", Label: "Anti-aliasing (post)", Type: "choice", Default: "none",
 		Choices: [][2]string{{"none", "Off"}, {"fxaa", "FXAA"}, {"fxaa_extreme", "FXAA (extreme)"}}},
-	{Key: "present_letterbox", Section: "Display", Label: "Keep 16:9 (letterbox)", Type: "bool", Default: "true"},
+	{Key: "video_mode_width", Section: "Display", Label: "Aspect ratio", Help: "The game renders natively at this shape (720 lines high) - wider shows more of the world; HUD and menus keep their proportions instead of stretching. Movies stay 16:9 with side bars. 21:9 is experimental: rare frames can lose the top half.", Type: "choice", Default: "1280",
+		Choices: [][2]string{{"1280", "16:9 (1280x720)"}, {"1152", "16:10 (1152x720)"}, {"1680", "21:9 ultrawide (1680x720, experimental)"}, {"960", "4:3 (960x720)"}}},
+	{Key: "l4d2_fps_max", Section: "Display", Label: "Frame-rate cap", Help: "The Xbox 360 version is capped at 30. Game simulation runs on a fixed tick, so higher caps only make motion smoother.", Type: "choice", Default: "60",
+		Choices: [][2]string{{"30", "30 (console)"}, {"60", "60"}, {"120", "120"}, {"144", "144"}, {"0", "Unlimited"}}},
+	{Key: "video_mode_height", Section: "Display", Type: "choice", Default: "720", Hidden: true},
+	{Key: "present_letterbox", Section: "Display", Label: "Keep aspect ratio (bars instead of stretching)", Type: "bool", Default: "true"},
 
 	// Rendering
 	{Key: "readback_resolve", Section: "Rendering", Label: "Text / render-to-texture accuracy", Help: "Full is required for correct menu and HUD text. Fast modes return stale data (scrambled letters) but stall the GPU less.", Type: "choice", Default: "full",
@@ -57,10 +63,15 @@ var SettingsSchema = []Setting{
 	{Key: "l4d2_overlay_render", Section: "Overlay", Label: "Resolution, draw calls, shader pipelines", Type: "bool", Default: "true"},
 	{Key: "l4d2_overlay_memory", Section: "Overlay", Label: "Memory usage", Type: "bool", Default: "true"},
 	{Key: "l4d2_overlay_settings", Section: "Overlay", Label: "Active GPU settings", Type: "bool", Default: "true"},
+	{Key: "l4d2_shader_toast", Section: "Overlay", Label: "Shader compile notice", Help: "Small notice at the bottom of the screen while new shaders compile (the cause of first-time hitches).", Type: "bool", Default: "true"},
 	{Key: "l4d2_overlay_corner", Section: "Overlay", Label: "Overlay position", Type: "choice", Default: "0",
 		Choices: [][2]string{{"0", "Top left"}, {"1", "Top right"}, {"2", "Bottom left"}, {"3", "Bottom right"}}},
 
 	// Input / audio
+	{Key: "l4d2_raw_mouse", Section: "Input & Audio", Label: "Raw mouse aiming (recommended for mouse)", Help: "Reads the mouse with Windows raw input (no pointer acceleration) and turns the view in proportion to how far you move it, frame-rate independent. Turns on keyboard & mouse mode automatically.", Type: "bool", Default: "false"},
+	{Key: "l4d2_mouse_sensitivity", Section: "Input & Audio", Label: "Raw mouse sensitivity", Type: "choice", Default: "1.0",
+		Choices: [][2]string{{"0.25", "0.25"}, {"0.5", "0.5"}, {"0.75", "0.75"}, {"1.0", "1.0"}, {"1.5", "1.5"}, {"2.0", "2.0"}, {"3.0", "3.0"}, {"4.0", "4.0"}}},
+	{Key: "l4d2_mouse_invert_y", Section: "Input & Audio", Label: "Invert mouse Y", Type: "bool", Default: "false"},
 	{Key: "mnk_mode", Section: "Input & Audio", Label: "Keyboard & mouse (emulated controller)", Type: "bool", Default: "false"},
 	{Key: "mnk_mouse", Section: "Input & Audio", Label: "Mouse aims (right stick)", Type: "bool", Default: "true"},
 	{Key: "input_backend", Section: "Input & Audio", Label: "Controller API", Type: "choice", Default: "sdl",
@@ -68,6 +79,9 @@ var SettingsSchema = []Setting{
 	{Key: "audio_mute", Section: "Input & Audio", Label: "Mute audio", Type: "bool", Default: "false"},
 
 	// Debug
+	{Key: "l4d2_perf_log", Section: "Debug", Label: "Performance log", Help: "Writes logs\\perf_summary.csv every 5 s: game FPS, lowest FPS, stutters, shaders compiled, memory.", Type: "bool", Default: "true"},
+	{Key: "l4d2_autoshot", Section: "Debug", Label: "Automatic screenshots", Help: "Saves a screenshot to logs\\shots every few seconds - useful for bug reports. F12 always takes one.", Type: "choice", Default: "0",
+		Choices: [][2]string{{"0", "Off"}, {"3", "Every 3 s"}, {"10", "Every 10 s"}, {"30", "Every 30 s"}}},
 	{Key: "log_level", Section: "Debug", Label: "Log level", Help: "Debug logging costs frame time; keep at Info for play.", Type: "choice", Default: "info",
 		Choices: [][2]string{{"warn", "Warnings only"}, {"info", "Info"}, {"debug", "Debug (slow)"}}},
 }
