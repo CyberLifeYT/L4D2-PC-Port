@@ -294,16 +294,12 @@ void Worker() {
         game_cmds.push_back(cmd);
       }
     }
-    // FOV: the server only re-reads it when the player's settings change, so
-    // nudge fov_desired after l4d2_fov changes (hook_server.cpp applies it).
+    // FOV is applied by the client view hook (src/stubs/hook_client.cpp) every
+    // frame, so a changed l4d2_fov takes effect at once.
     static std::string last_fov = "0";
     const std::string fov = rex::cvar::GetFlagByName("l4d2_fov");
     if (fov != last_fov) {
       last_fov = fov;
-      static bool flip = false;
-      flip = !flip;
-      game_cmds.push_back(flip ? "fov_desired 89" : "fov_desired 90");
-      game_cmds.push_back(flip ? "fov_desired 90" : "fov_desired 89");
       Log("fov -> %s", fov.c_str());
     }
     std::vector<double> boosts(game_cmds.size(), 0.0);

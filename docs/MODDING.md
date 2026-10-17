@@ -50,7 +50,7 @@ When you press Launch, the launcher collects the commands of every enabled mod a
 
 Many console variables are hidden in the Xbox 360 build (development-only). Before running a command, the port finds the ConVar it names and clears that flag, so commands that only work on a PC developer build work here too.
 
-A command whose name starts with `l4d2_` is a port setting rather than a game command. Any setting from `l4d2_settings.ini` can be changed this way while the game runs. `l4d2_fov` and `l4d2_skip_press_start` are the ones made for mods. `l4d2_skip_press_start 1` presses START every 1.5 s between 4 and 40 s after start-up, and stops as soon as you press anything. For `l4d2_fov`: the game's server clamps the player's FOV to 75–90, and the port replaces that function so `l4d2_fov` (50–150, 0 = game default) is used instead.
+A command whose name starts with `l4d2_` is a port setting rather than a game command. Any setting from `l4d2_settings.ini` can be changed this way while the game runs. `l4d2_fov` and `l4d2_skip_press_start` are the ones made for mods. `l4d2_skip_press_start 1` presses START every 1.5 s between 4 and 40 s after start-up, and stops as soon as you press anything. For `l4d2_fov` (50–150, 0 = game default): the game clamps `fov_desired` to 75–90, so the port instead scales the client's final view FOV, turning the default 90 into your value. It applies immediately, and scoped weapons keep their zoom relative to it.
 
 #### Launch options
 
@@ -87,7 +87,7 @@ The Xbox 360 build has no in-game console. Useful client variables found in this
 | ConVar | Default | Notes |
 |---|---|---|
 | `viewmodel_fov` | `50` | Weapon model FOV. |
-| `fov_desired` | `90` | The player's FOV request. The server clamps it to 75–90, so use the port's `l4d2_fov` for wider views. |
+| `fov_desired` | `90` | The player's FOV request, clamped to 75–90. Use the port's `l4d2_fov` for wider views. |
 | `joy_yawsensitivity` / `joy_pitchsensitivity` | `-1` / `1` | Controller look speed (negative yaw is normal). |
 
 Anything you know from PC L4D2 is worth trying; `logs\console.txt` says whether the ConVar exists.

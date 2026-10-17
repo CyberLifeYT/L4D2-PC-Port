@@ -667,9 +667,9 @@ REXCVAR_DEFINE_INT32(l4d2_fps_max, 30, "L4D2 Display",
 extern "C" __declspec(dllexport) int L4d2FpsMax() { return REXCVAR_GET(l4d2_fps_max); }
 
 // ---------------------------------------------------------------------------
-// Field of view. The server clamps the player's fov_desired to 75-90 before
-// calling SetDefaultFOV; src/stubs/hook_server.cpp replaces that function and
-// uses this value instead when it is set (FOV Changer mod: "l4d2_fov {fov}").
+// Field of view (FOV Changer mod: "l4d2_fov {fov}"). The game clamps
+// fov_desired to 75-90; src/stubs/hook_client.cpp instead scales the client's
+// final view FOV so that the default 90 becomes this value.
 REXCVAR_DEFINE_INT32(l4d2_fov, 0, "L4D2 Display", "Field of view in degrees (0 = game default, 90)");
 
 extern "C" __declspec(dllexport) int L4d2FovOverride() { return REXCVAR_GET(l4d2_fov); }

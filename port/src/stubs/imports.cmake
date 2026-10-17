@@ -85,7 +85,7 @@ if(TARGET l4d2_inputsystem_360)
   target_sources(l4d2_inputsystem_360 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/stubs/hook_inputsystem.cpp")
 endif()
 
-# Field of view: SetDefaultFOV without the game's 75-90 clamp (l4d2_fov).
-if(TARGET l4d2_server_360)
-  target_sources(l4d2_server_360 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/stubs/hook_server.cpp")
+# Field of view: the client's final view FOV follows l4d2_fov (FOV Changer mod).
+if(TARGET l4d2_client_360)
+  target_sources(l4d2_client_360 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/stubs/hook_client.cpp")
 endif()
