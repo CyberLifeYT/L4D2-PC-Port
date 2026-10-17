@@ -26,6 +26,32 @@ Requirements: Windows 10/11 x64, a Direct3D 12 GPU, the [Microsoft Edge WebView2
 
 While new shaders are being compiled a small **"Compiling shaders"** notice appears at the bottom of the screen (with the count), and at start-up it shows how many shaders were loaded from the cache. The game also writes `logs\perf_summary.csv` every 5 s (game FPS, lowest FPS, stutters, shaders compiled, memory) so performance problems can be reported with numbers.
 
+### PC controls
+
+Keyboard & mouse plays the game through an emulated Xbox 360 controller. Turn it on in the launcher under **Settings › Input & Audio › Keyboard & mouse**, or turn on **Raw mouse aiming**, which switches it on automatically. The mouse is captured while the game window has focus.
+
+| Controller | Keyboard / mouse |
+|---|---|
+| Left stick (move) | **W A S D** |
+| Right stick (look) | **Mouse** (or arrow keys) |
+| A | **Space** / ; |
+| B | **Backspace** / ' |
+| X | **L** |
+| Y | **P** |
+| Left trigger | **Q** / I |
+| Right trigger | **E** / O |
+| Left bumper | **1** |
+| Right bumper | **3** |
+| Left stick click | **F** |
+| Right stick click | **K** |
+| D-pad | **Shift + arrow keys** |
+| Back | **Tab** / Z |
+| Start | **Enter** / X |
+
+The game's own controller layout applies on top of this (its Controls menu shows which action each button does). Every binding is a `keybind_*` entry in `l4d2_settings.ini` and can also be changed while playing in the **F4** settings panel. With raw mouse aiming on, the mouse always drives the right stick, so the arrow keys no longer look around.
+
+A plugged-in Xbox controller works at any time alongside the keyboard.
+
 ### Settings
 
 The launcher's **Settings** page edits `l4d2_settings.ini` in the install folder; changes apply on the next launch. Highlights:
