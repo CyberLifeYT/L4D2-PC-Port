@@ -24,7 +24,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const LauncherVersion = "1.2.0"
+const LauncherVersion = "1.3.0"
 
 //go:embed ui/index.html
 var indexHTML string

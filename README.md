@@ -36,7 +36,7 @@ The port has native keyboard & mouse controls with the PC layout, on by default 
 | Look / aim | **Mouse** |
 | Fire / throw / use item | **Left click** |
 | Shove / heal or give to a teammate | **Right click** |
-| Jump / crouch | **Space** / hold **Ctrl** |
+| Jump / crouch | **Space** / hold **Ctrl** (the game's own crouch is a toggle; the port makes the key a hold) |
 | Use / revive / pick up | **E** |
 | Reload | **R** |
 | Flashlight | **F** |
@@ -45,7 +45,11 @@ The port has native keyboard & mouse controls with the PC layout, on by default 
 | Zoom (scoped weapons) | **Middle click** |
 | Voice commands / quick turn | **Z** or **C** / **V** |
 | Scoreboard / pause menu | **Tab** / **Esc** |
-| Menus: move / select / back | **Arrow keys** / **Enter** / **Backspace** |
+| Menus: move / select / back | **Mouse wheel** or **arrow keys** / **left click** or **Enter** / **right click** or **Backspace** |
+
+**Key prompts:** on-screen hints ("Hold %+attack% to heal") name your PC keys. The port registers the PC controls' keys as the game's own key binds, which the hints look up before the controller buttons (`l4d2_pc_prompts`).
+
+**Menus:** while a menu is open (main menu or pause), the mouse wheel moves the selection, left click selects and right click goes back (`l4d2_menu_mouse`). The menus are still the console's list menus: there is no pointer to aim at items.
 
 **Rebinding:** use the launcher's **Controls** page. Click **+** next to an action and press a key or mouse button, or roll the wheel; click a key to remove it. Bindings are stored as `l4d2_key_<action>=Key1,Key2` in `l4d2_settings.ini`.
 
@@ -70,13 +74,23 @@ The launcher's **Settings** page edits `l4d2_settings.ini` in the install folder
 
 - **PC keyboard & mouse** (Settings › Input, Controls page): PC layout with mouse look, all keys rebindable. See [PC controls](#pc-controls).
 - **Frame-rate cap** (Settings › Display): the 360 build caps itself with the engine's `fps_max` ConVar (default 30, hidden from the console). The port writes the chosen value — 30, 60, 120, 144 or unlimited — into that ConVar every frame. The default is 60 with V-Sync off: menus run at 60 and gameplay currently runs at about 40–50 FPS on a GTX 1080 (it was held to 30 before). With V-Sync on, frames that miss 60 are held to an even 30. Game simulation runs on Source's fixed server tick and is interpolated for rendering, so physics, AI and particles keep their timing at any frame rate.
-- **Aspect ratio** (Settings › Display): the game is given a native 16:9, 16:10, 21:9 (1680x720) or 4:3 video mode instead of being stretched. Source lays the HUD and menus out for the actual shape, and movies stay 16:9 with side bars.
+- **Aspect ratio** (Settings › Display): the game is given a native 16:9, 16:10, 21:9 (1456x624), 32:9 (1792x504) or 4:3 video mode instead of being stretched. Source lays the HUD and menus out for the actual shape, and movies stay 16:9 with side bars. The ultrawide modes use no more pixels than 16:9: every frame has to fit the 360's 10 MB of EDRAM, and the old 1680x720 21:9 mode overflowed it now and then (frames losing their top half). Use **Internal resolution 2x/3x** for a sharp ultrawide picture.
+- **Shader cache builder** (launcher › Play › *Build shader cache*, or `Build Shader Cache.bat` in the install folder): loads every campaign map once, sweeps the camera around and waits for the shader compiler, with a progress bar. Afterwards: **Delete cache**, **Play game** or **Exit**. New effects then no longer stutter the first time they appear. The cache lives in `Documents\l4d2\cache`.
+- **Performance:** cross-module virtual calls (Source calls between its DLLs all the time) used to take a lock in the recompiler runtime on every call, so the main and render threads fought over it. The port now caches those lookups per thread. Profiling: `l4d2_profile=150:30` writes `logs\profile.txt` (per-thread CPU and hottest functions, named from the build's .pdb files).
 - **Mods** (launcher › Mods): loose-file mods load ahead of the game's own files.
   - Each mod is a folder in `game\mods\<name>\` laid out like `left4dead2\`, or containing a `zip0.360.zip`.
   - When you press Launch, the launcher puts enabled mods, in your chosen order, at the top of `gameinfo.xtx`'s search paths. The original is kept as `gameinfo.xtx.orig`.
   - A `mod.json` can add sliders, toggles and choices on the Mods page, plus game console commands that use their values. The port runs those through the game's own command buffer and unhides development-only ConVars first.
-  - **Add starter mods** installs **FOV Changer** (a field-of-view slider; also the template for settings mods) and **Skip Intro** (no start-up movies, and START is pressed for you on the title screen, so the game opens on the main menu).
-  - PC `.vpk` addons are unpacked to loose files when added. Scripts, configs, text and 360-built maps work; PC-format models, textures and sounds need their 360 versions.
+  - **Add starter mods** installs:
+    - **FOV Changer**: field-of-view slider (75–120), past the console's 90 limit; also the template for settings mods.
+    - **Skip Intro**: no start-up movies, and START is pressed for you on the title screen, so the game opens on the main menu.
+    - **Viewmodel FOV**: how big the weapon and hands look.
+    - **Crosshair Style**: colour, thickness, opacity, spread.
+    - **No Film Grain**.
+    - **Bot Difficulty**: survivor bot aim speed and reaction times (Relaxed / Normal / Sharp / Elite).
+    - **Unlock All Chapters**.
+  - A HUD-scale mod is not possible: this build has no HUD scale variable.
+  - PC `.vpk` / `.zip` addons and folders are unpacked to loose files when added, and **PC textures are converted to the 360 format** (`.vtf` -> `.360.vtf`: big-endian VTFX header, byte-swapped DXT/pixel data; checked byte-for-byte against the game's own textures). Scripts, configs, text, materials and 360-built maps work too. PC **models and sounds are not converted** (360 models are big-endian studio files and sounds are XMA); the mod's `conversion_report.txt` lists them.
   - Full guide: [docs/MODDING.md](docs/MODDING.md).
 
 ### Updates
@@ -125,6 +139,8 @@ port\scripts\pc_tests.bat       :: PC controls: real OS mouse moves, W, clicks, 
                                 :: the game window is in front) + console commands; logs\pcinput.txt
 port\scripts\cal_tests.bat      :: stick-deadzone calibration (fixed right-stick levels, autoshots every second)
 port\scripts\v_tests.bat        :: Skip Intro (-novid + auto START), console-started map, l4d2_fov changes, input test
+port\scripts\x_tests.bat        :: 32:9, starter-mod commands, key-prompt binds, menu navigation, profiler
+port\scripts\ab_tests.bat       :: indirect-call cache on/off frame-rate A/B, chapter unlock, PC texture mod
 ```
 
 ### Making a patch release

@@ -12,8 +12,8 @@
 # indirect-call fallback first asks vscript (L4d2VscriptLookup, see
 # src/stubs/vscript_lookup.cpp) for any address in vscript's code range.
 
-set(_marker_v1 "L4D2 port: vscript dispatch fallback (inserted")
-set(_marker "L4D2 port: indirect-call cache v2")
+set(_old_markers "L4D2 port: vscript dispatch fallback (inserted;L4D2 port: indirect-call cache v2 (inserted")
+set(_marker "L4D2 port: indirect-call cache v3")
 set(_resolve "rex_indirect_func_ = rex::runtime::ResolveIndirectFunction(rex_indirect_target_);")
 set(_resolve_new "rex_indirect_func_ = L4d2ResolveIndirect(rex_indirect_target_);")
 set(_anchor "#define REX_CALL_INDIRECT_FUNC(x)")
@@ -38,14 +38,16 @@ foreach(_f IN LISTS _pchs)
   else()
     set(_attr "__declspec(dllimport)")
   endif()
-  # Remove the v1 helper (a block ending at the REX_CALL_INDIRECT_FUNC anchor).
-  string(FIND "${_n}" "// --- ${_marker_v1}" _v1)
-  if(NOT _v1 EQUAL -1)
-    string(FIND "${_n}" "${_anchor}" _a)
-    math(EXPR _len "${_a} - ${_v1}")
-    string(SUBSTRING "${_n}" ${_v1} ${_len} _old)
-    string(REPLACE "${_old}" "" _n "${_n}")
-  endif()
+  # Remove an older helper (a block ending at the REX_CALL_INDIRECT_FUNC anchor).
+  foreach(_om IN LISTS _old_markers)
+    string(FIND "${_n}" "// --- ${_om}" _v1)
+    if(NOT _v1 EQUAL -1)
+      string(FIND "${_n}" "${_anchor}" _a)
+      math(EXPR _len "${_a} - ${_v1}")
+      string(SUBSTRING "${_n}" ${_v1} ${_len} _old)
+      string(REPLACE "${_old}" "" _n "${_n}")
+    endif()
+  endforeach()
   string(FIND "${_n}" "${_marker}" _has)
   if(_has EQUAL -1)
     # Cross-module indirect calls (virtual calls into another DLL - constant in
@@ -62,7 +64,13 @@ static inline PPCFunc* L4d2ResolveIndirectSlow(uint32_t t) {
   return rex::runtime::ResolveIndirectFunction(t);
 }
 struct L4d2IndirectSlot { uint32_t key; PPCFunc* fn; };
+// L4D2_NO_INDIRECT_CACHE=1 turns the cache off (A/B performance tests).
+static inline bool L4d2IndirectCacheOff() {
+  static const bool off = [] { const char* v = std::getenv(\"L4D2_NO_INDIRECT_CACHE\"); return v && v[0] == '1'; }();
+  return off;
+}
 static inline PPCFunc* L4d2ResolveIndirect(uint32_t t) {
+  if (L4d2IndirectCacheOff()) return L4d2ResolveIndirectSlow(t);
   static thread_local L4d2IndirectSlot cache[1024];
   L4d2IndirectSlot& s = cache[(t >> 2) & 1023u];
   if (s.key == t && s.fn) return s.fn;
