@@ -13,7 +13,6 @@
 #include <windows.h>
 
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 
 namespace {
@@ -43,21 +42,7 @@ void ApplyFov(uint8_t* base, uint32_t fov_addr) {
   if (!(cur > 1.0f && cur < 179.0f)) return;
   constexpr double kHalfRad = 3.14159265358979323846 / 360.0;  // degrees -> half angle in radians
   const double t = std::tan(cur * kHalfRad) * std::tan(want * kHalfRad);  // divided by tan(45 deg) = 1
-  const float out = float(2.0 * std::atan(t) / kHalfRad);
-  {
-    using LogFn = void (*)(const char*);
-    static LogFn log = reinterpret_cast<LogFn>(GetProcAddress(GetModuleHandleW(nullptr), "L4d2ConsoleLog"));
-    static int n = 0;
-    static uint64_t calls = 0;
-    ++calls;
-    if (log && (n < 40 || calls % 600 == 0)) {
-      ++n;
-      char m[160];
-      snprintf(m, sizeof(m), "fov hook #%llu addr %08X cur %.3f want %d out %.3f", (unsigned long long)calls, fov_addr,
-               cur, want, out);
-      log(m);
-    }
-  }
+  const float out = float(std::atan(t) / kHalfRad);  // half angle back to full degrees
   std::memcpy(&bits, &out, 4);
   Store32(base + fov_addr, bits);
 }
