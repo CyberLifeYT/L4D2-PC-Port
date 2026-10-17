@@ -28,29 +28,34 @@ While new shaders are being compiled a small **"Compiling shaders"** notice appe
 
 ### PC controls
 
-Keyboard & mouse plays the game through an emulated Xbox 360 controller. Turn it on in the launcher under **Settings › Input & Audio › Keyboard & mouse**, or turn on **Raw mouse aiming**, which switches it on automatically. The mouse is captured while the game window has focus.
+The port has native keyboard & mouse controls with the PC layout, on by default (**Settings › Input & Audio › PC keyboard & mouse controls**). An Xbox controller works alongside at any time. The mouse is captured while the game window has focus.
 
-| Controller | Keyboard / mouse |
+| Action | Default |
 |---|---|
-| Left stick (move) | **W A S D** |
-| Right stick (look) | **Mouse** (or arrow keys) |
-| A | **Space** / ; |
-| B | **Backspace** / ' |
-| X | **L** |
-| Y | **P** |
-| Left trigger | **Q** / I |
-| Right trigger | **E** / O |
-| Left bumper | **1** |
-| Right bumper | **3** |
-| Left stick click | **F** |
-| Right stick click | **K** |
-| D-pad | **Shift + arrow keys** |
-| Back | **Tab** / Z |
-| Start | **Enter** / X |
+| Move / walk | **W A S D** / hold **Shift** |
+| Look / aim | **Mouse** |
+| Fire / throw / use item | **Left click** |
+| Shove / heal or give to a teammate | **Right click** |
+| Jump / crouch | **Space** / hold **Ctrl** |
+| Use / revive / pick up | **E** |
+| Reload | **R** |
+| Flashlight | **F** |
+| Switch weapon (primary / secondary) | **Q**, **1**, **2** or **mouse wheel** |
+| Grenade / first aid / pills | **3** / **4** / **5** |
+| Zoom (scoped weapons) | **Middle click** |
+| Voice commands / quick turn | **Z** or **C** / **V** |
+| Scoreboard / pause menu | **Tab** / **Esc** |
+| Menus: move / select / back | **Arrow keys** / **Enter** / **Backspace** |
 
-The game's own controller layout applies on top of this (its Controls menu shows which action each button does). Every binding is a `keybind_*` entry in `l4d2_settings.ini` and can also be changed while playing in the **F4** settings panel. With raw mouse aiming on, the mouse always drives the right stick, so the arrow keys no longer look around.
+**Rebinding:** use the launcher's **Controls** page. Click **+** next to an action and press a key or mouse button, or roll the wheel; click a key to remove it. Bindings are stored as `l4d2_key_<action>=Key1,Key2` in `l4d2_settings.ini`.
 
-A plugged-in Xbox controller works at any time alongside the keyboard.
+**How it works:** the 360 game only reads an Xbox pad, so the port turns PC input into pad 0's state right where the game reads it. Each key and mouse button presses the pad control for its action (for example left click pulls the right trigger, which is Fire). Mouse motion comes from the game window's relative-mouse events, which SDL reads from Windows raw input. Every time the game polls the pad, the motion since the last poll becomes a right-stick value that is linear in mouse speed and starts just past the stick deadzone. The same hand movement therefore turns the view by the same amount at any frame rate. The game's own look curve is linear at its defaults, and aim-assist damping is off, so nothing adds acceleration on top.
+
+**Tuning:** sensitivity and invert-Y are in Settings. Two values in `l4d2_settings.ini` fine-tune the feel:
+- `l4d2_mouse_counts_full` sets how many mouse counts per second equal a full stick push.
+- `l4d2_mouse_deadzone` sets where the stick output starts.
+
+Bug reports can include `logs\pcinput.txt`, which logs the input event counts every 5 s.
 
 ### Settings
 
@@ -59,14 +64,20 @@ The launcher's **Settings** page edits `l4d2_settings.ini` in the install folder
 - **Text accuracy** (`readback_resolve`): *Full* is needed for correct menu/HUD text — Source draws glyphs on the GPU and reads them back. Faster modes scramble letters.
 - **Render target emulation** (`render_target_path_d3d12`): *Accurate (ROV)* — the default — reproduces the 360's EDRAM formats exactly. It is what makes in-game lighting correct (no posterised/banded colours) and makes the Bink intro movies show picture instead of a black screen. *Fast (RTV)* is cheaper but lighting and movies are wrong.
 - **Real occlusion queries**: Source's HDR auto-exposure depends on them.
-- Overlay sections, resolution scale (1x–3x), anisotropic filtering, FXAA, V-Sync, keyboard & mouse, log level.
+- Overlay sections, resolution scale (1x–3x), anisotropic filtering, FXAA, V-Sync, PC controls and mouse sensitivity, log level.
 
 ### PC features
 
-- **Raw mouse aiming** (Settings › Input): reads the mouse with Windows raw input (`WM_INPUT`, no pointer acceleration) and, every time the game polls the pad, converts the counts since the last poll into a right-stick value that is linear in mouse speed and starts just past the stick deadzone. The view turns by the same amount for the same hand movement at any frame rate. Sensitivity and invert-Y are in the launcher; `l4d2_mouse_deadzone` / `l4d2_mouse_counts_full` in `l4d2_settings.ini` fine-tune it. Keyboard and mouse buttons come from the keyboard & mouse mode, which is switched on with it.
+- **PC keyboard & mouse** (Settings › Input, Controls page): PC layout with mouse look, all keys rebindable. See [PC controls](#pc-controls).
 - **Frame-rate cap** (Settings › Display): the 360 build caps itself with the engine's `fps_max` ConVar (default 30, hidden from the console). The port writes the chosen value — 30, 60, 120, 144 or unlimited — into that ConVar every frame. The default is 60 with V-Sync off: menus run at 60 and gameplay currently runs at about 40–50 FPS on a GTX 1080 (it was held to 30 before). With V-Sync on, frames that miss 60 are held to an even 30. Game simulation runs on Source's fixed server tick and is interpolated for rendering, so physics, AI and particles keep their timing at any frame rate.
 - **Aspect ratio** (Settings › Display): the game is given a native 16:9, 16:10, 21:9 (1680x720) or 4:3 video mode instead of being stretched. Source lays the HUD and menus out for the actual shape, and movies stay 16:9 with side bars.
-- **Mods** (launcher › Mods): loose-file mods load ahead of the game's own files. Each mod is a folder in `game\mods\<name>\` laid out like `left4dead2\` (or containing a `zip0.360.zip`); the launcher puts enabled mods, in your chosen order, at the top of `gameinfo.xtx`'s search paths when you press Launch (the original is kept as `gameinfo.xtx.orig`). PC `.vpk` addons are unpacked to loose files when added — scripts, configs, text and 360-built maps work; PC-format models, textures and sounds need their 360 versions.
+- **Mods** (launcher › Mods): loose-file mods load ahead of the game's own files.
+  - Each mod is a folder in `game\mods\<name>\` laid out like `left4dead2\`, or containing a `zip0.360.zip`.
+  - When you press Launch, the launcher puts enabled mods, in your chosen order, at the top of `gameinfo.xtx`'s search paths. The original is kept as `gameinfo.xtx.orig`.
+  - A `mod.json` can add sliders, toggles and choices on the Mods page, plus game console commands that use their values. The port runs those through the game's own command buffer and unhides development-only ConVars first.
+  - **Add starter mods** installs **FOV Changer** (a field-of-view slider; also the template for settings mods) and **Skip Intro** (no start-up movies, and START is pressed for you on the title screen, so the game opens on the main menu).
+  - PC `.vpk` addons are unpacked to loose files when added. Scripts, configs, text and 360-built maps work; PC-format models, textures and sounds need their 360 versions.
+  - Full guide: [docs/MODDING.md](docs/MODDING.md).
 
 ### Updates
 
@@ -109,8 +120,11 @@ port\scripts\run_dev.bat        :: run against ..\assets with a log in port\logs
 port\scripts\test_map.bat       :: windowed 3-minute run straight into Dead Center; screenshots +
                                 :: perf_summary.csv land in port\testruns\
 port\scripts\perf_matrix.bat    :: the same run with several settings files, for A/B comparisons
-port\scripts\feature_tests.bat  :: raw mouse / frame-rate / 21:9 runs; an autopilot presses START/A
-                                :: to reach a campaign and a synthetic mouse sweep turns the camera
+port\scripts\feature_tests.bat  :: frame-rate / 21:9 runs; an autopilot presses START/A to reach a campaign
+port\scripts\pc_tests.bat       :: PC controls: real OS mouse moves, W, clicks, R, F (SendInput, only while
+                                :: the game window is in front) + console commands; logs\pcinput.txt
+port\scripts\cal_tests.bat      :: stick-deadzone calibration (fixed right-stick levels, autoshots every second)
+port\scripts\v_tests.bat        :: Skip Intro (-novid + auto START), console-started map, l4d2_fov changes, input test
 ```
 
 ### Making a patch release

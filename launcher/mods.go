@@ -17,29 +17,160 @@ package main
 
 import (
 	"bytes"
+	"embed"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
 
 type ModInfo struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-	Files   int    `json:"files"`
-	SizeMB  string `json:"size_mb"`
+	Name        string       `json:"name"`
+	Enabled     bool         `json:"enabled"`
+	Files       int          `json:"files"`
+	SizeMB      string       `json:"size_mb"`
+	Title       string       `json:"title,omitempty"`
+	Version     string       `json:"version,omitempty"`
+	Author      string       `json:"author,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Settings    []ModSetting `json:"settings,omitempty"`
+	Commands    int          `json:"commands,omitempty"` // console commands the mod runs
+	Launch      []string     `json:"launch_options,omitempty"`
+}
+
+// ModSetting is one control a mod.json declares. The launcher shows it on the
+// Mods page and substitutes its value for {key} in the mod's commands.
+type ModSetting struct {
+	Key     string      `json:"key"`
+	Label   string      `json:"label"`
+	Type    string      `json:"type"` // slider | toggle | choice
+	Min     float64     `json:"min,omitempty"`
+	Max     float64     `json:"max,omitempty"`
+	Step    float64     `json:"step,omitempty"`
+	Unit    string      `json:"unit,omitempty"`
+	Default string      `json:"default"`
+	Choices [][2]string `json:"choices,omitempty"` // value, label
+	Help    string      `json:"help,omitempty"`
+	Value   string      `json:"value"`
+}
+
+// ModManifest is the optional mod.json at a mod folder's root.
+type ModManifest struct {
+	Title       string       `json:"title"`
+	Version     string       `json:"version"`
+	Author      string       `json:"author"`
+	Description string       `json:"description"`
+	Settings    []ModSetting `json:"settings"`
+	// Console commands run in the game while the mod is enabled, e.g.
+	// "fov_desired {fov}". Re-applied every few seconds, so they survive
+	// map changes. Values from Settings replace {key}.
+	Commands []string `json:"commands"`
+	// Game command-line switches, e.g. "-novid". Only "-word" tokens.
+	LaunchOptions []string `json:"launch_options"`
 }
 
 type modConfig struct {
-	Order   []string        `json:"order"`
-	Enabled map[string]bool `json:"enabled"`
+	Order   []string                     `json:"order"`
+	Enabled map[string]bool              `json:"enabled"`
+	Values  map[string]map[string]string `json:"values,omitempty"`
+}
+
+func readManifest(dir string) (*ModManifest, error) {
+	b, err := os.ReadFile(filepath.Join(dir, "mod.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m ModManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("mod.json: %v", err)
+	}
+	return &m, nil
+}
+
+var settingKeyRe = regexp.MustCompile(`^[A-Za-z0-9_]{1,32}$`)
+var launchOptRe = regexp.MustCompile(`^-[a-z0-9_]{1,40}$`)
+
+// settingValue returns a safe value for s: numbers clamped to the slider
+// range, toggles as 1/0, choices limited to the declared values.
+func settingValue(s ModSetting, v string) string {
+	if v == "" {
+		v = s.Default
+	}
+	switch s.Type {
+	case "slider":
+		f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err != nil {
+			f, _ = strconv.ParseFloat(s.Default, 64)
+		}
+		if s.Max > s.Min {
+			f = math.Max(s.Min, math.Min(s.Max, f))
+		}
+		if s.Step > 0 {
+			f = s.Min + math.Round((f-s.Min)/s.Step)*s.Step
+		}
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	case "toggle":
+		if v == "1" || strings.EqualFold(v, "true") {
+			return "1"
+		}
+		return "0"
+	case "choice":
+		for _, c := range s.Choices {
+			if c[0] == v {
+				return v
+			}
+		}
+		if len(s.Choices) > 0 {
+			for _, c := range s.Choices {
+				if c[0] == s.Default {
+					return s.Default
+				}
+			}
+			return s.Choices[0][0]
+		}
+	}
+	return ""
+}
+
+// modCommands expands a mod's commands with its current setting values.
+// Commands are single lines without ';' or quotes so a mod can only run the
+// commands it lists.
+func modCommands(m *ModManifest, values map[string]string) ([]string, error) {
+	vals := map[string]string{}
+	for _, s := range m.Settings {
+		if !settingKeyRe.MatchString(s.Key) {
+			return nil, fmt.Errorf("bad setting key %q", s.Key)
+		}
+		vals[s.Key] = settingValue(s, values[s.Key])
+	}
+	var out []string
+	for _, c := range m.Commands {
+		for k, v := range vals {
+			c = strings.ReplaceAll(c, "{"+k+"}", v)
+		}
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if strings.ContainsAny(c, ";\"\r\n{}|") || len(c) > 200 {
+			return nil, fmt.Errorf("command %q is not allowed (one simple command per entry)", c)
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func modsDir(install string) string        { return filepath.Join(install, "game", "mods") }
@@ -108,17 +239,40 @@ func ListMods(install string) ([]ModInfo, error) {
 			}
 			return nil
 		})
-		out = append(out, ModInfo{Name: n, Enabled: c.Enabled[n], Files: files, SizeMB: fmt.Sprintf("%.1f MB", float64(size)/(1<<20))})
+		mi := ModInfo{Name: n, Enabled: c.Enabled[n], Files: files, SizeMB: fmt.Sprintf("%.1f MB", float64(size)/(1<<20))}
+		if m, err := readManifest(filepath.Join(modsDir(install), n)); err != nil {
+			mi.Description = "Broken mod.json: " + err.Error()
+		} else if m != nil {
+			mi.Title, mi.Version, mi.Author, mi.Description = m.Title, m.Version, m.Author, m.Description
+			mi.Commands = len(m.Commands)
+			mi.Launch = m.LaunchOptions
+			for _, st := range m.Settings {
+				st.Value = settingValue(st, c.Values[n][st.Key])
+				mi.Settings = append(mi.Settings, st)
+			}
+		}
+		out = append(out, mi)
 	}
 	return out, nil
 }
 
 // SaveMods stores the load order and enabled flags from the UI.
 func SaveMods(install string, mods []ModInfo) error {
-	c := modConfig{Enabled: map[string]bool{}}
+	old := loadModConfig(install)
+	c := modConfig{Enabled: map[string]bool{}, Values: old.Values}
+	if c.Values == nil {
+		c.Values = map[string]map[string]string{}
+	}
 	for _, m := range mods {
 		c.Order = append(c.Order, m.Name)
 		c.Enabled[m.Name] = m.Enabled
+		if len(m.Settings) > 0 {
+			v := map[string]string{}
+			for _, s := range m.Settings {
+				v[s.Key] = settingValue(s, s.Value)
+			}
+			c.Values[m.Name] = v
+		}
 	}
 	return saveModConfig(install, c)
 }
@@ -213,7 +367,120 @@ func ApplyMods(install string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return enabled, os.WriteFile(gi, out, 0o644)
+	if err := os.WriteFile(gi, out, 0o644); err != nil {
+		return nil, err
+	}
+	// Console commands of enabled mods -> l4d2_console_commands in the
+	// settings file; the game runs them through its own console.
+	c := loadModConfig(install)
+	var cmds []string
+	for _, n := range enabled {
+		m, err := readManifest(filepath.Join(modsDir(install), n))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", n, err)
+		}
+		if m == nil {
+			continue
+		}
+		mc, err := modCommands(m, c.Values[n])
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", n, err)
+		}
+		cmds = append(cmds, mc...)
+	}
+	var opts []string
+	seen := map[string]bool{}
+	for _, n := range enabled {
+		m, _ := readManifest(filepath.Join(modsDir(install), n))
+		if m == nil {
+			continue
+		}
+		for _, o := range m.LaunchOptions {
+			o = strings.ToLower(strings.TrimSpace(o))
+			if !launchOptRe.MatchString(o) {
+				return nil, fmt.Errorf("%s: launch option %q is not allowed (only -switches)", n, o)
+			}
+			if !seen[o] {
+				seen[o] = true
+				opts = append(opts, o)
+			}
+		}
+	}
+	vals := ReadSettings(install)
+	joined := strings.Join(cmds, ";")
+	launch := strings.Join(opts, " ")
+	if vals[ModCommandsKey] != joined || vals[ModLaunchKey] != launch {
+		vals[ModCommandsKey] = joined
+		vals[ModLaunchKey] = launch
+		if err := WriteSettings(install, vals); err != nil {
+			return nil, err
+		}
+	}
+	return enabled, nil
+}
+
+// ModLaunchKey carries the mods' game command-line switches.
+const ModLaunchKey = "l4d2_mod_launch_options"
+
+// ModCommandsKey is the game setting that carries the mods' console commands.
+const ModCommandsKey = "l4d2_console_commands"
+
+//go:embed starter_mods
+var starterMods embed.FS
+
+// InstallStarterMods copies the bundled example mods (FOV Changer, Skip
+// Intro) into the mods folder, enabled, without touching existing copies.
+func InstallStarterMods(install string) ([]string, error) {
+	if install == "" {
+		return nil, errors.New("install the game first")
+	}
+	ents, err := starterMods.ReadDir("starter_mods")
+	if err != nil {
+		return nil, err
+	}
+	c := loadModConfig(install)
+	var added []string
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		root := "starter_mods/" + e.Name()
+		var man ModManifest
+		if b, err := starterMods.ReadFile(root + "/mod.json"); err == nil {
+			json.Unmarshal(b, &man)
+		}
+		name := sanitizeModName(man.Title)
+		if man.Title == "" {
+			name = e.Name()
+		}
+		dst := filepath.Join(modsDir(install), name)
+		if _, err := os.Stat(dst); err == nil {
+			continue // already there; keep the user's copy
+		}
+		err := fs.WalkDir(starterMods, root, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			rel := strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
+			target := filepath.Join(dst, filepath.FromSlash(rel))
+			if d.IsDir() {
+				return os.MkdirAll(target, 0o755)
+			}
+			b, err := starterMods.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(target, b, 0o644)
+		})
+		if err != nil {
+			os.RemoveAll(dst)
+			return added, err
+		}
+		c.Order = append(c.Order, name)
+		c.Enabled[name] = true
+		added = append(added, name)
+	}
+	return added, saveModConfig(install, c)
 }
 
 // injectSearchPaths inserts "Game mods/<name>" lines at the top of the
@@ -239,7 +506,8 @@ func injectSearchPaths(src []byte, mods []string) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString(nl + "\t\t\t// Added by the L4D2 PC Port launcher (Mods page)")
 	for _, m := range mods {
-		b.WriteString(nl + "\t\t\tGame\t\t\t\tmods/" + m)
+		// Quoted: KeyValues splits unquoted tokens at spaces ("My Addon").
+		b.WriteString(nl + "\t\t\tGame\t\t\t\t\"mods/" + m + "\"")
 	}
 	return []byte(s[:at] + b.String() + s[at:]), nil
 }

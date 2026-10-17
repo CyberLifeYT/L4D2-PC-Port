@@ -1,0 +1,12 @@
+{
+  "title": "Skip Intro",
+  "version": "1.0",
+  "author": "L4D2 PC Port",
+  "description": "Skips the start-up movies (Valve logo, legal screen, intro cinematic) and presses START for you on the title screen, so the game opens straight on the main menu with your profile and saves loaded as usual.",
+  "launch_options": [
+    "-novid"
+  ],
+  "commands": [
+    "l4d2_skip_press_start 1"
+  ]
+}

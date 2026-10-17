@@ -26,4 +26,6 @@ move /y logs\shots\*.bmp "%OUT%\" >NUL 2>&1
 copy /y logs\perf_summary.csv "%OUT%\" >NUL 2>&1
 copy /y "logs\test_%NAME%.log" "%OUT%\" >NUL 2>&1
 copy /y logs\settings_applied.txt "%OUT%\" >NUL 2>&1
+copy /y logs\pcinput.txt "%OUT%\" >NUL 2>&1
+copy /y logs\console.txt "%OUT%\" >NUL 2>&1
 echo done> "%OUT%\done.txt"

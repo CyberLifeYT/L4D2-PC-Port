@@ -24,7 +24,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const LauncherVersion = "1.1.0"
+const LauncherVersion = "1.2.0"
 
 //go:embed ui/index.html
 var indexHTML string
@@ -430,6 +430,7 @@ func (a *App) bind() {
 		}
 		return AddMod(a.cfg.InstallDir, p)
 	}))
+	must(w.Bind("installStarterMods", func() ([]string, error) { return InstallStarterMods(a.cfg.InstallDir) }))
 	must(w.Bind("openModsFolder", func() {
 		if a.cfg.InstallDir != "" {
 			os.MkdirAll(modsDir(a.cfg.InstallDir), 0o755)

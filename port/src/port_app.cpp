@@ -21,9 +21,16 @@
 #include "capture.h"
 #include "overlay.h"
 
+namespace rex::ui {
+class Window;
+}
 namespace l4d2 {
-void StartRawMouse();
-void StopRawMouse();
+bool PcControlsEnabled();
+void AttachPcInput(rex::ui::Window* window);
+void DetachPcInput();
+void StartConsoleBridge();
+void StopConsoleBridge();
+std::string ModLaunchOptions();
 }  // namespace l4d2
 
 REXCVAR_DEFINE_STRING(l4d2_settings_file, "", "L4D2 Debug",
@@ -161,12 +168,27 @@ void L4d2App::OnPreSetup(rex::RuntimeConfig& config) {
   InstallCrashLog();
   if (!config.graphics && config.gpu_plugin.empty()) config.gpu_plugin = "xenos";
   ApplySettingsFile();
-  // Raw mouse rides on the SDK's keyboard/mouse mode for keys, mouse buttons
-  // and cursor capture; the inputsystem hook then overwrites the right stick
-  // that mode produces with the raw-input value on every poll.
-  if (rex::cvar::GetFlagByName("l4d2_raw_mouse") == "true") {
+  // PC controls ride on the SDK's keyboard/mouse mode for the virtual pad
+  // device and cursor capture (relative mouse mode). Its own controller-style
+  // key map is cleared so each key presses only what its PC action says
+  // (src/pcinput.cpp).
+  if (l4d2::PcControlsEnabled()) {
     rex::cvar::SetFlagByName("mnk_mode", "true");
     rex::cvar::SetFlagByName("mnk_mouse", "true");
+    static const char* kSdkBinds[] = {
+        "keybind_a", "keybind_b", "keybind_x", "keybind_y", "keybind_left_trigger",
+        "keybind_right_trigger", "keybind_left_shoulder", "keybind_right_shoulder",
+        "keybind_lstick_up", "keybind_lstick_down", "keybind_lstick_left", "keybind_lstick_right",
+        "keybind_lstick_press", "keybind_rstick_up", "keybind_rstick_down", "keybind_rstick_left",
+        "keybind_rstick_right", "keybind_rstick_press", "keybind_dpad_up", "keybind_dpad_down",
+        "keybind_dpad_left", "keybind_dpad_right", "keybind_back", "keybind_start", "keybind_guide"};
+    for (const char* b : kSdkBinds) rex::cvar::SetFlagByName(b, "");
+  }
+  // Command-line switches from enabled mods (Skip Intro: -novid) go on the
+  // game's own command line.
+  if (std::string extra = l4d2::ModLaunchOptions(); !extra.empty()) {
+    std::string cl = rex::cvar::GetFlagByName("cl");
+    rex::cvar::SetFlagByName("cl", cl.empty() ? extra : cl + " " + extra);
   }
   // A log_level from the settings file resets every category; re-apply ours.
   l4d2::ApplyLogLevels();
@@ -178,11 +200,12 @@ void L4d2App::OnPostSetup() {
     l4d2::StartCapture(rt->graphics_system()->presenter());
     l4d2::SetGraphicsSystem(rt->graphics_system());
   }
-  l4d2::StartRawMouse();
+  l4d2::StartConsoleBridge();
 }
 
 void L4d2App::OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) {
   perf_overlay_ = l4d2::CreatePerfOverlay(drawer);
+  l4d2::AttachPcInput(window());
   rex::ui::RegisterBind("bind_l4d2_overlay", "F2", "Toggle L4D2 performance overlay",
                         [] { l4d2::TogglePerfOverlay(); });
   rex::ui::RegisterBind("bind_l4d2_screenshot", "F12", "Save a screenshot to logs\\shots",
@@ -193,6 +216,7 @@ void L4d2App::OnShutdown() {
   rex::ui::UnregisterBind("bind_l4d2_overlay");
   rex::ui::UnregisterBind("bind_l4d2_screenshot");
   l4d2::StopCapture();
-  l4d2::StopRawMouse();
+  l4d2::DetachPcInput();
+  l4d2::StopConsoleBridge();
   perf_overlay_.reset();
 }

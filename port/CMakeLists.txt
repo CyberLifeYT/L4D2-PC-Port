@@ -17,7 +17,8 @@ set(L4D2_SOURCES
     src/overlay.cpp
     src/capture.cpp
     src/gpu_stats.cpp
-    src/rawmouse.cpp
+    src/pcinput.cpp
+    src/console.cpp
 )
 
 if(WIN32)

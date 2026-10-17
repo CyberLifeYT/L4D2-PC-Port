@@ -15,7 +15,7 @@ type Setting struct {
 	Section string      `json:"section"`
 	Label   string      `json:"label"`
 	Help    string      `json:"help"`
-	Type    string      `json:"type"` // bool | choice | int
+	Type    string      `json:"type"` // bool | choice | int | key | text
 	Default string      `json:"default"`
 	Choices [][2]string `json:"choices,omitempty"` // value, label
 	Min     int         `json:"min,omitempty"`
@@ -38,6 +38,9 @@ var SettingsSchema = []Setting{
 	{Key: "l4d2_fps_max", Section: "Display", Label: "Frame-rate cap", Help: "The Xbox 360 version is capped at 30. Game simulation runs on a fixed tick, so higher caps only make motion smoother.", Type: "choice", Default: "60",
 		Choices: [][2]string{{"30", "30 (console)"}, {"60", "60"}, {"120", "120"}, {"144", "144"}, {"0", "Unlimited"}}},
 	{Key: "video_mode_height", Section: "Display", Type: "choice", Default: "720", Hidden: true},
+	// Set while playing by the FOV Changer mod; reset to the game default at
+	// each start so disabling the mod restores it.
+	{Key: "l4d2_fov", Section: "Display", Type: "text", Default: "0", Hidden: true},
 	{Key: "present_letterbox", Section: "Display", Label: "Keep aspect ratio (bars instead of stretching)", Type: "bool", Default: "true"},
 
 	// Rendering
@@ -68,15 +71,49 @@ var SettingsSchema = []Setting{
 		Choices: [][2]string{{"0", "Top left"}, {"1", "Top right"}, {"2", "Bottom left"}, {"3", "Bottom right"}}},
 
 	// Input / audio
-	{Key: "l4d2_raw_mouse", Section: "Input & Audio", Label: "Raw mouse aiming (recommended for mouse)", Help: "Reads the mouse with Windows raw input (no pointer acceleration) and turns the view in proportion to how far you move it, frame-rate independent. Turns on keyboard & mouse mode automatically.", Type: "bool", Default: "false"},
-	{Key: "l4d2_mouse_sensitivity", Section: "Input & Audio", Label: "Raw mouse sensitivity", Type: "choice", Default: "1.0",
-		Choices: [][2]string{{"0.25", "0.25"}, {"0.5", "0.5"}, {"0.75", "0.75"}, {"1.0", "1.0"}, {"1.5", "1.5"}, {"2.0", "2.0"}, {"3.0", "3.0"}, {"4.0", "4.0"}}},
+	{Key: "l4d2_pc_controls", Section: "Input & Audio", Label: "PC keyboard & mouse controls", Help: "Plays like the PC version: WASD to move, mouse to look, left click to fire, right click to shove, R reload, E use... Rebind every key on the Controls page. A controller keeps working alongside.", Type: "bool", Default: "true"},
+	{Key: "l4d2_mouse_sensitivity", Section: "Input & Audio", Label: "Mouse sensitivity", Type: "choice", Default: "1.0",
+		Choices: [][2]string{{"0.25", "0.25"}, {"0.5", "0.5"}, {"0.75", "0.75"}, {"1.0", "1.0"}, {"1.25", "1.25"}, {"1.5", "1.5"}, {"2.0", "2.0"}, {"3.0", "3.0"}, {"4.0", "4.0"}}},
 	{Key: "l4d2_mouse_invert_y", Section: "Input & Audio", Label: "Invert mouse Y", Type: "bool", Default: "false"},
-	{Key: "mnk_mode", Section: "Input & Audio", Label: "Keyboard & mouse (emulated controller)", Type: "bool", Default: "false"},
-	{Key: "mnk_mouse", Section: "Input & Audio", Label: "Mouse aims (right stick)", Type: "bool", Default: "true"},
+	{Key: "mnk_mode", Section: "Input & Audio", Label: "Controller-style keyboard (only when PC controls are off)", Help: "The emulator's generic keyboard-to-controller mapping. Not needed with PC controls.", Type: "bool", Default: "false"},
+	{Key: "mnk_mouse", Section: "Input & Audio", Type: "bool", Default: "true", Hidden: true},
 	{Key: "input_backend", Section: "Input & Audio", Label: "Controller API", Type: "choice", Default: "sdl",
 		Choices: [][2]string{{"sdl", "SDL (all controllers)"}, {"xinput", "XInput (Xbox controllers)"}}},
 	{Key: "audio_mute", Section: "Input & Audio", Label: "Mute audio", Type: "bool", Default: "false"},
+
+	// Controls (Controls page). Comma-separated keys; must match the game's
+	// l4d2_key_* defaults in port/src/pcinput.cpp.
+	{Key: "l4d2_key_forward", Section: "Controls", Label: "Move forward", Type: "key", Default: "W"},
+	{Key: "l4d2_key_back", Section: "Controls", Label: "Move back", Type: "key", Default: "S"},
+	{Key: "l4d2_key_left", Section: "Controls", Label: "Move left", Type: "key", Default: "A"},
+	{Key: "l4d2_key_right", Section: "Controls", Label: "Move right", Type: "key", Default: "D"},
+	{Key: "l4d2_key_walk", Section: "Controls", Label: "Walk (hold)", Type: "key", Default: "Shift"},
+	{Key: "l4d2_key_jump", Section: "Controls", Label: "Jump", Type: "key", Default: "Space"},
+	{Key: "l4d2_key_crouch", Section: "Controls", Label: "Crouch (hold)", Type: "key", Default: "Ctrl"},
+	{Key: "l4d2_key_fire", Section: "Controls", Label: "Fire / throw / use item", Type: "key", Default: "LMB"},
+	{Key: "l4d2_key_shove", Section: "Controls", Label: "Shove / heal or give to teammate", Type: "key", Default: "RMB"},
+	{Key: "l4d2_key_use", Section: "Controls", Label: "Use / revive / pick up", Type: "key", Default: "E"},
+	{Key: "l4d2_key_reload", Section: "Controls", Label: "Reload", Type: "key", Default: "R"},
+	{Key: "l4d2_key_zoom", Section: "Controls", Label: "Zoom (scoped weapons)", Type: "key", Default: "MMB"},
+	{Key: "l4d2_key_flashlight", Section: "Controls", Label: "Flashlight", Type: "key", Default: "F"},
+	{Key: "l4d2_key_switch_weapon", Section: "Controls", Label: "Switch weapon (primary / secondary)", Type: "key", Default: "Q,1,2,WheelUp,WheelDown"},
+	{Key: "l4d2_key_grenade", Section: "Controls", Label: "Grenade", Type: "key", Default: "3"},
+	{Key: "l4d2_key_health", Section: "Controls", Label: "First aid / defibrillator / upgrade", Type: "key", Default: "4"},
+	{Key: "l4d2_key_pills", Section: "Controls", Label: "Pills / adrenaline", Type: "key", Default: "5"},
+	{Key: "l4d2_key_voice", Section: "Controls", Label: "Voice commands", Type: "key", Default: "Z,C"},
+	{Key: "l4d2_key_turn_around", Section: "Controls", Label: "Quick turn (180)", Type: "key", Default: "V"},
+	{Key: "l4d2_key_scoreboard", Section: "Controls", Label: "Scoreboard / vote no", Type: "key", Default: "Tab"},
+	{Key: "l4d2_key_pause", Section: "Controls", Label: "Pause menu / vote yes", Type: "key", Default: "Escape"},
+	{Key: "l4d2_key_menu_select", Section: "Controls", Label: "Menu: select", Type: "key", Default: "Enter"},
+	{Key: "l4d2_key_menu_back", Section: "Controls", Label: "Menu: back", Type: "key", Default: "Backspace"},
+	{Key: "l4d2_key_menu_up", Section: "Controls", Label: "Menu: up", Type: "key", Default: "Up"},
+	{Key: "l4d2_key_menu_down", Section: "Controls", Label: "Menu: down", Type: "key", Default: "Down"},
+	{Key: "l4d2_key_menu_left", Section: "Controls", Label: "Menu: left", Type: "key", Default: "Left"},
+	{Key: "l4d2_key_menu_right", Section: "Controls", Label: "Menu: right", Type: "key", Default: "Right"},
+
+	// Written by the launcher from enabled mods (Mods page).
+	{Key: ModCommandsKey, Section: "Mods", Type: "text", Default: "", Hidden: true},
+	{Key: ModLaunchKey, Section: "Mods", Type: "text", Default: "", Hidden: true},
 
 	// Debug
 	{Key: "l4d2_perf_log", Section: "Debug", Label: "Performance log", Help: "Writes logs\\perf_summary.csv every 5 s: game FPS, lowest FPS, stutters, shaders compiled, memory.", Type: "bool", Default: "true"},

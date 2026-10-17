@@ -395,7 +395,7 @@ func TestMods(t *testing.T) {
 	}
 	gi, _ := os.ReadFile(filepath.Join(gdir, "gameinfo.xtx"))
 	s := string(gi)
-	if !strings.Contains(s, "Game\t\t\t\tmods/Loose\r\n") || strings.Index(s, "mods/Loose") > strings.Index(s, "mods/My Addon") ||
+	if !strings.Contains(s, "Game\t\t\t\t\"mods/Loose\"\r\n") || !strings.Contains(s, "\"mods/My Addon\"") || strings.Index(s, "mods/Loose") > strings.Index(s, "mods/My Addon") ||
 		strings.Index(s, "mods/My Addon") > strings.Index(s, "|gameinfo_path|") {
 		t.Fatalf("bad gameinfo:\n%s", s)
 	}
@@ -407,5 +407,68 @@ func TestMods(t *testing.T) {
 	}
 	if _, err := ExtractVPK(filepath.Join(gdir, "gameinfo.xtx"), t.TempDir()); err == nil {
 		t.Fatal("non-vpk accepted")
+	}
+}
+
+func TestStarterModsAndCommands(t *testing.T) {
+	inst := t.TempDir()
+	gdir := filepath.Join(inst, "game", "left4dead2")
+	os.MkdirAll(gdir, 0o755)
+	os.WriteFile(filepath.Join(gdir, "gameinfo.xtx"), []byte("\"GameInfo\"\n{\n\tSearchPaths\n\t{\n\t\tGame\tleft4dead2\n\t}\n}\n"), 0o644)
+	added, err := InstallStarterMods(inst)
+	if err != nil || len(added) != 2 {
+		t.Fatal(added, err)
+	}
+	if again, _ := InstallStarterMods(inst); len(again) != 0 {
+		t.Fatal("starter mods installed twice", again)
+	}
+	if _, err := os.Stat(filepath.Join(modsDir(inst), "Skip Intro", "mod.json")); err != nil {
+		t.Fatal("skip intro", err)
+	}
+	mods, _ := ListMods(inst)
+	var fov *ModInfo
+	for i := range mods {
+		if mods[i].Title == "FOV Changer" {
+			fov = &mods[i]
+		}
+	}
+	if fov == nil || len(fov.Settings) != 1 || fov.Settings[0].Value != "90" || !fov.Enabled || fov.Commands != 1 {
+		t.Fatalf("fov mod %+v", fov)
+	}
+	if _, err := ApplyMods(inst); err != nil {
+		t.Fatal(err)
+	}
+	if v := ReadSettings(inst); v[ModCommandsKey] != "l4d2_fov 90;l4d2_skip_press_start 1" || v[ModLaunchKey] != "-novid" {
+		t.Fatalf("commands %q launch %q", v[ModCommandsKey], v[ModLaunchKey])
+	}
+	fov.Settings[0].Value = "200" // clamped to the slider's max
+	if err := SaveMods(inst, mods); err != nil {
+		t.Fatal(err)
+	}
+	ApplyMods(inst)
+	if v := ReadSettings(inst)[ModCommandsKey]; v != "l4d2_fov 120;l4d2_skip_press_start 1" {
+		t.Fatalf("commands %q", v)
+	}
+	// Settings the user saved elsewhere survive.
+	vals := ReadSettings(inst)
+	vals["l4d2_key_fire"] = "LMB,E"
+	WriteSettings(inst, vals)
+	for i := range mods {
+		mods[i].Enabled = false
+	}
+	SaveMods(inst, mods)
+	ApplyMods(inst)
+	vals = ReadSettings(inst)
+	if vals[ModCommandsKey] != "" || vals[ModLaunchKey] != "" || vals["l4d2_key_fire"] != "LMB,E" {
+		t.Fatalf("after disable: %q %q", vals[ModCommandsKey], vals["l4d2_key_fire"])
+	}
+	// A mod can't smuggle extra commands through a setting value or template.
+	bad := &ModManifest{Commands: []string{"say hi; quit"}}
+	if _, err := modCommands(bad, nil); err == nil {
+		t.Fatal("expected rejection")
+	}
+	ch := &ModManifest{Settings: []ModSetting{{Key: "m", Type: "choice", Default: "a", Choices: [][2]string{{"a", "A"}, {"b", "B"}}}}, Commands: []string{"x {m}"}}
+	if c, _ := modCommands(ch, map[string]string{"m": "b; quit"}); len(c) != 1 || c[0] != "x a" {
+		t.Fatalf("choice %v", c)
 	}
 }

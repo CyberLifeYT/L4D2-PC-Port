@@ -1,0 +1,22 @@
+{
+  "title": "FOV Changer",
+  "version": "1.0",
+  "author": "L4D2 PC Port",
+  "description": "Sets your field of view with a slider, beyond the console's 90° limit. Also a template: copy this folder, rename it, and edit mod.json to make your own settings mod (see docs/MODDING.md).",
+  "settings": [
+    {
+      "key": "fov",
+      "label": "Field of view",
+      "type": "slider",
+      "min": 75,
+      "max": 120,
+      "step": 1,
+      "unit": "°",
+      "default": "90",
+      "help": "Field of view in degrees. The console version allows only 75-90; the port removes that limit. 90 is the default."
+    }
+  ],
+  "commands": [
+    "l4d2_fov {fov}"
+  ]
+}
