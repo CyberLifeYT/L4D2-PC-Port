@@ -1,0 +1,18 @@
+{
+  "title": "Bot Difficulty",
+  "version": "1.0",
+  "author": "L4D2 PC Port",
+  "description": "How sharp your survivor bot teammates are: aim speed, how quickly they notice threats and how fast they help a pinned teammate.",
+  "settings": [
+    { "key": "skill", "label": "Survivor bots", "type": "choice", "default": "1000 0.5 2.0 1.0 0.5",
+      "choices": [["500 1.0 3.0 2.0 1.0", "Relaxed"], ["1000 0.5 2.0 1.0 0.5", "Normal (game default)"],
+                  ["1600 0.25 1.0 0.6 0.3", "Sharp"], ["2600 0.1 0.4 0.3 0.15", "Elite"]] }
+  ],
+  "commands": [
+    "sb_combat_saccade_speed {skill.1}",
+    "sb_min_attention_notice_time {skill.2}",
+    "sb_friend_immobilized_reaction_time_normal {skill.3}",
+    "sb_friend_immobilized_reaction_time_hard {skill.4}",
+    "sb_friend_immobilized_reaction_time_expert {skill.5}"
+  ]
+}

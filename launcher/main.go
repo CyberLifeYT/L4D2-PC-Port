@@ -89,6 +89,9 @@ func (a *App) hwnd() uintptr { return uintptr(a.w.Window()) }
 
 // emit calls a JS function with a JSON payload from any goroutine.
 func (a *App) emit(fn string, payload any) {
+	if a.w == nil {
+		return
+	}
 	b, _ := json.Marshal(payload)
 	a.w.Dispatch(func() { a.w.Eval(fmt.Sprintf("window.%s && window.%s(%s)", fn, fn, b)) })
 }
@@ -301,6 +304,7 @@ func (a *App) Launch() error {
 	if a.game != nil {
 		return errors.New("the game is already running")
 	}
+	writeShaderCacheShortcut(dir)
 	cmd := exec.Command(exe)
 	cmd.Dir = dir
 	if err := cmd.Start(); err != nil {
@@ -470,6 +474,10 @@ func (a *App) bind() {
 		return vals, nil
 	}))
 	must(w.Bind("launch", func() error { return a.Launch() }))
+	must(w.Bind("openShaderCache", func() error {
+		writeShaderCacheShortcut(a.cfg.InstallDir)
+		return openShaderCacheWindow()
+	}))
 	must(w.Bind("openInstallFolder", func() {
 		if a.cfg.InstallDir != "" {
 			openInExplorer(a.cfg.InstallDir)
@@ -695,6 +703,10 @@ func cli(args []string) (bool, int) {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--shader-cache" {
+		runShaderCache()
+		return
+	}
 	if handled, code := cli(os.Args[1:]); handled {
 		os.Exit(code)
 	}

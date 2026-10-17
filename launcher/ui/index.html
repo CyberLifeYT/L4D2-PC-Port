@@ -227,6 +227,11 @@ pre{white-space:pre-wrap;font:12px/1.4 Consolas,monospace;color:var(--text);back
         </div>
       </div>
       <div class="card">
+        <h2>Shader cache</h2>
+        <p class="lede" style="margin:0 0 12px">New effects stutter the first time they appear while their shaders compile. Build the cache once (about 1&ndash;2 minutes per map) and play-throughs stay smooth.</p>
+        <button class="btn" id="shaderCacheBtn">Build shader cache&hellip;</button>
+      </div>
+      <div class="card">
         <h2>PC controls</h2>
         <p class="lede" style="margin:0 0 10px">Native keyboard &amp; mouse with the PC layout. Change any key on the <a href="#" data-go="controls" style="color:var(--bone)">Controls</a> page; an Xbox controller works alongside.</p>
         <div class="kv">
@@ -460,6 +465,10 @@ $$('[data-channel-seg] button').forEach(b=>b.onclick=async()=>{
     if($('#page-updates').classList.contains('active'))$('#checkUpBtn').click();}
   catch(e){toast(errMsg(e))}
 });
+$('#shaderCacheBtn').onclick=async()=>{
+  if(!(S.port_installed&&S.game_installed)){go('install');return}
+  try{await openShaderCache()}catch(e){toast(errMsg(e))}
+};
 $('#playBtn').onclick=async()=>{
   if(S.running)return;
   if(!(S.port_installed&&S.game_installed)){go('install');return}

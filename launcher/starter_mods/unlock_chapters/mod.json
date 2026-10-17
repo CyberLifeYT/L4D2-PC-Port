@@ -1,0 +1,7 @@
+{
+  "title": "Unlock All Chapters",
+  "version": "1.0",
+  "author": "L4D2 PC Port",
+  "description": "Every chapter of every campaign can be picked from the menu without playing up to it first.",
+  "commands": [ "sv_unlockedchapters 99" ]
+}

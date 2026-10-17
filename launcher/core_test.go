@@ -416,7 +416,7 @@ func TestStarterModsAndCommands(t *testing.T) {
 	os.MkdirAll(gdir, 0o755)
 	os.WriteFile(filepath.Join(gdir, "gameinfo.xtx"), []byte("\"GameInfo\"\n{\n\tSearchPaths\n\t{\n\t\tGame\tleft4dead2\n\t}\n}\n"), 0o644)
 	added, err := InstallStarterMods(inst)
-	if err != nil || len(added) != 2 {
+	if err != nil || len(added) != 7 {
 		t.Fatal(added, err)
 	}
 	if again, _ := InstallStarterMods(inst); len(again) != 0 {
@@ -438,15 +438,23 @@ func TestStarterModsAndCommands(t *testing.T) {
 	if _, err := ApplyMods(inst); err != nil {
 		t.Fatal(err)
 	}
-	if v := ReadSettings(inst); v[ModCommandsKey] != "l4d2_fov 90;l4d2_skip_press_start 1" || v[ModLaunchKey] != "-novid" {
-		t.Fatalf("commands %q launch %q", v[ModCommandsKey], v[ModLaunchKey])
+	v := ReadSettings(inst)
+	for _, want := range []string{"l4d2_fov 90", "l4d2_skip_press_start 1", "cl_crosshair_red 138", "cl_crosshair_blue 220",
+		"sb_combat_saccade_speed 1000", "sb_friend_immobilized_reaction_time_expert 0.5", "mat_grain_enable 0",
+		"cl_viewmodelfovsurvivor 51", "sv_unlockedchapters 99"} {
+		if !strings.Contains(";"+v[ModCommandsKey]+";", ";"+want+";") {
+			t.Fatalf("commands %q missing %q", v[ModCommandsKey], want)
+		}
+	}
+	if v[ModLaunchKey] != "-novid" {
+		t.Fatalf("launch %q", v[ModLaunchKey])
 	}
 	fov.Settings[0].Value = "200" // clamped to the slider's max
 	if err := SaveMods(inst, mods); err != nil {
 		t.Fatal(err)
 	}
 	ApplyMods(inst)
-	if v := ReadSettings(inst)[ModCommandsKey]; v != "l4d2_fov 120;l4d2_skip_press_start 1" {
+	if v := ReadSettings(inst)[ModCommandsKey]; !strings.Contains(v, "l4d2_fov 120;") {
 		t.Fatalf("commands %q", v)
 	}
 	// Settings the user saved elsewhere survive.

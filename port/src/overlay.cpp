@@ -368,3 +368,8 @@ std::unique_ptr<rex::ui::ImGuiDialog> CreatePerfOverlay(rex::ui::ImGuiDrawer* dr
 void TogglePerfOverlay() { REXCVAR_SET(l4d2_overlay, !REXCVAR_GET(l4d2_overlay)); }
 
 }  // namespace l4d2
+
+namespace l4d2 {
+// Shader pipelines compiled this session (shader cache builder, precache.cpp).
+uint64_t PipelinesCreated() { return g_pipelines.load(std::memory_order_relaxed); }
+}  // namespace l4d2

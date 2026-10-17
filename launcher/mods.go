@@ -159,6 +159,11 @@ func modCommands(m *ModManifest, values map[string]string) ([]string, error) {
 	var out []string
 	for _, c := range m.Commands {
 		for k, v := range vals {
+			// {key.N} is the Nth space-separated part of the value, so one
+			// choice can set several variables (e.g. "255 0 0" for a colour).
+			for i, part := range strings.Fields(v) {
+				c = strings.ReplaceAll(c, "{"+k+"."+strconv.Itoa(i+1)+"}", part)
+			}
 			c = strings.ReplaceAll(c, "{"+k+"}", v)
 		}
 		c = strings.TrimSpace(c)

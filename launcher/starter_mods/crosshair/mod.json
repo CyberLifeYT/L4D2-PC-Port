@@ -1,0 +1,22 @@
+{
+  "title": "Crosshair Style",
+  "version": "1.0",
+  "author": "L4D2 PC Port",
+  "description": "Crosshair colour, thickness, opacity and whether it spreads with weapon accuracy.",
+  "settings": [
+    { "key": "color", "label": "Colour", "type": "choice", "default": "138 182 220",
+      "choices": [["138 182 220", "Default blue"], ["0 255 0", "Green"], ["255 255 255", "White"], ["255 0 0", "Red"],
+                  ["255 220 0", "Yellow"], ["0 255 255", "Cyan"], ["255 0 255", "Pink"]] },
+    { "key": "thick", "label": "Thickness", "type": "slider", "min": 1, "max": 5, "step": 1, "unit": " px", "default": "2" },
+    { "key": "alpha", "label": "Opacity", "type": "slider", "min": 50, "max": 255, "step": 5, "default": "255" },
+    { "key": "dyn", "label": "Spread with accuracy", "type": "toggle", "default": "1" }
+  ],
+  "commands": [
+    "cl_crosshair_red {color.1}",
+    "cl_crosshair_green {color.2}",
+    "cl_crosshair_blue {color.3}",
+    "cl_crosshair_thickness {thick}",
+    "cl_crosshair_alpha {alpha}",
+    "cl_crosshair_dynamic {dyn}"
+  ]
+}

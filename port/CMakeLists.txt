@@ -19,6 +19,8 @@ set(L4D2_SOURCES
     src/gpu_stats.cpp
     src/pcinput.cpp
     src/console.cpp
+    src/precache.cpp
+    src/profiler.cpp
 )
 
 if(WIN32)

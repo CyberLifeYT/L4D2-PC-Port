@@ -56,6 +56,9 @@ void ApplyFov(uint8_t* base, uint32_t fov_addr) {
 //   if (!g_pToolFramework) return false;
 //   return g_pToolFramework->SetupEngineView(origin, angles, fov);  // vtable +0x24
 REX_HOOK_RAW(sub_88585420) {
+  using NoteFn = void (*)();
+  static NoteFn note = reinterpret_cast<NoteFn>(GetProcAddress(GetModuleHandleW(nullptr), "L4d2NoteWorldView"));
+  if (note) note();  // shader cache builder: the world view is being drawn
   ApplyFov(base, ctx.r5.u32);
   constexpr uint32_t kToolFramework = 0x8875C374 + 4;
   const uint32_t tools = Load32(base + kToolFramework);

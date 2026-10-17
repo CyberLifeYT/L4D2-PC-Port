@@ -67,6 +67,8 @@ REXCVAR_DEFINE_DOUBLE(l4d2_mouse_turn_boost, 3.0, "L4D2 Input",
                       "mapping divided by it), so fast flicks are not capped by the stick's top turn speed");
 REXCVAR_DEFINE_DOUBLE(l4d2_mouse_counts_full, 2400.0, "L4D2 Input",
                       "Mouse counts per second that equal a full stick deflection at sensitivity 1");
+REXCVAR_DEFINE_BOOL(l4d2_crouch_hold, true, "L4D2 Input",
+                    "Crouch while the crouch key is held (the game's own LB crouch is a toggle); false = press to toggle");
 REXCVAR_DEFINE_DOUBLE(l4d2_walk_speed, 0.45, "L4D2 Input", "Stick deflection used while the walk key is held");
 REXCVAR_DEFINE_BOOL(l4d2_test_input, false, "L4D2 Debug",
                     "Automated tests: after 150 s send real mouse moves, key presses and clicks with SendInput");
@@ -75,6 +77,8 @@ REXCVAR_DEFINE_BOOL(l4d2_test_calibrate, false, "L4D2 Debug",
 REXCVAR_DEFINE_BOOL(l4d2_skip_press_start, false, "L4D2 Input",
                     "Press START for you on the PRESS START title screen (Skip Intro mod), so the game "
                     "signs in your profile and storage device as usual and opens on the main menu");
+REXCVAR_DEFINE_STRING(l4d2_test_pad, "", "L4D2 Debug",
+                      "Automated tests: pad presses 'seconds:BUTTON|...' (A B X Y START BACK LB RB UP DOWN LEFT RIGHT LT RT)");
 REXCVAR_DEFINE_BOOL(l4d2_test_autopress, false, "L4D2 Debug",
                     "Automated tests: press START/A on a schedule to reach gameplay");
 
@@ -125,7 +129,7 @@ enum : uint16_t {
   kStart = 0x0010, kBack = 0x0020, kLThumb = 0x0040, kRThumb = 0x0080,
   kLB = 0x0100, kRB = 0x0200, kA = 0x1000, kB = 0x2000, kX = 0x4000, kY = 0x8000,
 };
-enum class Target { kButton, kLT, kRT, kFwd, kBackMove, kLeftMove, kRightMove, kWalk };
+enum class Target { kButton, kLT, kRT, kFwd, kBackMove, kLeftMove, kRightMove, kWalk, kCrouch };
 
 struct Action {
   const char* name;
@@ -139,7 +143,7 @@ const Action kActions[] = {
     L4D2_ACT(forward, Target::kFwd, 0),       L4D2_ACT(back, Target::kBackMove, 0),
     L4D2_ACT(left, Target::kLeftMove, 0),     L4D2_ACT(right, Target::kRightMove, 0),
     L4D2_ACT(walk, Target::kWalk, 0),         L4D2_ACT(jump, Target::kButton, kA),
-    L4D2_ACT(crouch, Target::kButton, kLB),   L4D2_ACT(fire, Target::kRT, 0),
+    L4D2_ACT(crouch, Target::kCrouch, kLB),   L4D2_ACT(fire, Target::kRT, 0),
     L4D2_ACT(shove, Target::kLT, 0),          L4D2_ACT(use, Target::kButton, kX),
     L4D2_ACT(reload, Target::kButton, kB),    L4D2_ACT(zoom, Target::kButton, kRThumb),
     L4D2_ACT(flashlight, Target::kButton, kDUp), L4D2_ACT(switch_weapon, Target::kButton, kY),
@@ -259,7 +263,7 @@ class PcInput final : public rex::ui::WindowInputListener {
       dx_ = dy_ = 0;
     }
     uint16_t buttons = 0;
-    bool lt = false, rt = false, fwd = false, bwd = false, lft = false, rgt = false, walk = false;
+    bool lt = false, rt = false, fwd = false, bwd = false, lft = false, rgt = false, walk = false, crouch = false;
     std::unique_lock<std::mutex> binds_lock(binds_mutex_);
     for (size_t i = 0; i < kNumActions; ++i) {
       bool on = false;
@@ -274,9 +278,22 @@ class PcInput final : public rex::ui::WindowInputListener {
         case Target::kLeftMove: lft = true; break;
         case Target::kRightMove: rgt = true; break;
         case Target::kWalk: walk = true; break;
+        case Target::kCrouch: crouch = true; break;
       }
     }
     binds_lock.unlock();
+    // The game's crouch (LB, toggle_duck) toggles on each press. For a held
+    // key, tap it when the key goes down and again when it comes up.
+    if (REXCVAR_GET(l4d2_crouch_hold)) {
+      const double now = Now();
+      if (crouch != crouch_held_) {
+        crouch_held_ = crouch;
+        crouch_tap_until_ = now + 0.12;
+      }
+      if (now < crouch_tap_until_) buttons |= kLB;
+    } else if (crouch) {
+      buttons |= kLB;
+    }
     bool changed = false;
     if (buttons) {
       p[4] |= uint8_t(buttons >> 8);
@@ -410,6 +427,8 @@ class PcInput final : public rex::ui::WindowInputListener {
   }
 
   std::atomic<bool> enabled_{false};
+  bool crouch_held_ = false;       // guest poll thread only
+  double crouch_tap_until_ = 0.0;  // guest poll thread only
   std::mutex mutex_;
   bool down_[kNumCodes] = {};
   float dx_ = 0, dy_ = 0;
@@ -424,6 +443,8 @@ class PcInput final : public rex::ui::WindowInputListener {
 
 PcInput g_input;
 std::atomic<int> g_cal_rx{INT32_MIN};  // calibration: forced right-stick X
+std::atomic<int> g_force_rx{INT32_MIN}, g_force_ry{0};  // shader cache builder: forced look
+std::atomic<uint16_t> g_force_buttons{0};
 rex::ui::Window* g_window = nullptr;
 std::atomic<bool> g_test_running{false};
 std::thread g_test_thread, g_log_thread;
@@ -601,6 +622,14 @@ void DetachPcInput() {
 
 void PcInputLog(const char* msg) { Log("%s", msg); }
 
+// Shader cache builder: hold the right stick (and buttons) at fixed values;
+// x = INT32_MIN releases it.
+void SetForcedLook(int x, int y) {
+  g_force_ry = y;
+  g_force_rx = x;
+}
+void SetForcedButtons(uint16_t b) { g_force_buttons = b; }
+
 }  // namespace l4d2
 
 // Called by the inputsystem hook after every XInputGetState(user, state).
@@ -620,6 +649,56 @@ extern "C" __declspec(dllexport) int L4d2PcEditPadState(uint32_t user, uint8_t* 
     state[12] = uint8_t(uint16_t(cal) >> 8); state[13] = uint8_t(uint16_t(cal));
     state[14] = 0; state[15] = 0;
     changed = 1;
+  }
+  if (const int fx = g_force_rx.load(); fx != INT32_MIN) {
+    const int fy = g_force_ry.load();
+    state[12] = uint8_t(uint16_t(int16_t(fx)) >> 8); state[13] = uint8_t(uint16_t(int16_t(fx)));
+    state[14] = uint8_t(uint16_t(int16_t(fy)) >> 8); state[15] = uint8_t(uint16_t(int16_t(fy)));
+    changed = 1;
+  }
+  if (const uint16_t fb = g_force_buttons.load()) {
+    state[4] |= uint8_t(fb >> 8);
+    state[5] |= uint8_t(fb);
+    changed = 1;
+  }
+  {
+    // Scripted pad presses for automated tests (0.2 s each).
+    struct Press { double at; uint16_t bits; uint8_t trig; };
+    static const std::vector<Press> presses = [] {
+      std::vector<Press> v;
+      const std::string spec = REXCVAR_GET(l4d2_test_pad);
+      size_t pos = 0;
+      while (pos < spec.size()) {
+        size_t e = spec.find('|', pos);
+        if (e == std::string::npos) e = spec.size();
+        const std::string item = spec.substr(pos, e - pos);
+        const size_t c = item.find(':');
+        if (c != std::string::npos) {
+          const std::string b = item.substr(c + 1);
+          static const struct { const char* n; uint16_t bits; uint8_t trig; } kNames[] = {
+              {"A", 0x1000, 0}, {"B", 0x2000, 0}, {"X", 0x4000, 0}, {"Y", 0x8000, 0}, {"START", 0x0010, 0},
+              {"BACK", 0x0020, 0}, {"LB", 0x0100, 0}, {"RB", 0x0200, 0}, {"UP", 0x0001, 0}, {"DOWN", 0x0002, 0},
+              {"LEFT", 0x0004, 0}, {"RIGHT", 0x0008, 0}, {"LT", 0, 1}, {"RT", 0, 2}};
+          for (const auto& k : kNames)
+            if (b == k.n) v.push_back({atof(item.substr(0, c).c_str()), k.bits, k.trig});
+        }
+        pos = e + 1;
+      }
+      return v;
+    }();
+    if (!presses.empty()) {
+      static const auto t0 = std::chrono::steady_clock::now();
+      const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+      for (const auto& pr : presses) {
+        if (t >= pr.at && t < pr.at + 0.2) {
+          state[4] |= uint8_t(pr.bits >> 8);
+          state[5] |= uint8_t(pr.bits);
+          if (pr.trig == 1) state[6] = 255;
+          if (pr.trig == 2) state[7] = 255;
+          changed = 1;
+        }
+      }
+    }
   }
   if (REXCVAR_GET(l4d2_skip_press_start)) {
     // Skip Intro: with -novid the title screen comes up a few seconds after

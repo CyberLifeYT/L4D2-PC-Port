@@ -1,0 +1,11 @@
+{
+  "title": "Viewmodel FOV",
+  "version": "1.0",
+  "author": "L4D2 PC Port",
+  "description": "Changes how big your weapon and hands look. Higher values push the gun further away and show more of the screen.",
+  "settings": [
+    { "key": "fov", "label": "Weapon FOV", "type": "slider", "min": 40, "max": 90, "step": 1, "unit": "°",
+      "default": "51", "help": "51 is the game's default." }
+  ],
+  "commands": [ "cl_viewmodelfovsurvivor {fov}" ]
+}

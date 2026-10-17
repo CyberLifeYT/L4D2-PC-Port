@@ -31,6 +31,10 @@ void DetachPcInput();
 void StartConsoleBridge();
 void StopConsoleBridge();
 std::string ModLaunchOptions();
+void StartPrecache();
+void StartProfiler();
+void StopProfiler();
+void StopPrecache();
 }  // namespace l4d2
 
 REXCVAR_DEFINE_STRING(l4d2_settings_file, "", "L4D2 Debug",
@@ -201,6 +205,18 @@ void L4d2App::OnPostSetup() {
     l4d2::SetGraphicsSystem(rt->graphics_system());
   }
   l4d2::StartConsoleBridge();
+  l4d2::StartPrecache();
+  l4d2::StartProfiler();
+  // Where the shader cache and saves live, for the launcher's shader cache
+  // window ("Delete cache") and for bug reports.
+  {
+    std::error_code ec;
+    std::filesystem::create_directories(ExeDir() / "logs", ec);
+    std::ofstream f(ExeDir() / "logs" / "paths.txt", std::ios::trunc);
+    f << "cache_root=" << cache_root().string() << "\n";
+    f << "user_data_root=" << user_data_root().string() << "\n";
+    f << "game_data_root=" << game_data_root().string() << "\n";
+  }
 }
 
 void L4d2App::OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) {
@@ -217,6 +233,8 @@ void L4d2App::OnShutdown() {
   rex::ui::UnregisterBind("bind_l4d2_screenshot");
   l4d2::StopCapture();
   l4d2::DetachPcInput();
+  l4d2::StopProfiler();
+  l4d2::StopPrecache();
   l4d2::StopConsoleBridge();
   perf_overlay_.reset();
 }

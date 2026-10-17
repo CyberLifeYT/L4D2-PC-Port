@@ -1,0 +1,11 @@
+{
+  "title": "No Film Grain",
+  "version": "1.0",
+  "author": "L4D2 PC Port",
+  "description": "Turns off the film grain noise drawn over the picture for a cleaner image.",
+  "settings": [
+    { "key": "grain", "label": "Film grain", "type": "choice", "default": "0",
+      "choices": [["0", "Off"], ["1", "On (game default)"]] }
+  ],
+  "commands": [ "mat_grain_enable {grain}" ]
+}

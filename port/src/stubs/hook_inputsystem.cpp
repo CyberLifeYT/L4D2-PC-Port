@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <set>
+#include <string>
 
 // sub_83513798 is the game's XInputGetState(dwUserIndex, pState) wrapper
 // (mr r5,r4 / li r4,1 / b XamInputGetState). After the real call the port's
@@ -75,7 +77,9 @@ void RunConsoleCommands(PPCContext& ctx, uint8_t* base) {
     ctx.r5.u64 = 0;
     fn(ctx, base);
     ctx = saved;
-    if (log) {
+    // Log each distinct command once (mod commands and key binds repeat every 10 s).
+    static std::set<std::string> logged;
+    if (log && logged.size() < 2000 && logged.insert(cmd).second) {
       char m[600];
       snprintf(m, sizeof(m), "ran: %s", cmd);
       if (char* nl = strchr(m, '\n')) *nl = 0;

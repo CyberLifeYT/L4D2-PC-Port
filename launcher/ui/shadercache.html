@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shader Cache</title>
+<style>
+:root{
+  --bg:#090807; --panel:rgba(20,17,15,.9); --line:#2b2521; --line2:#3a312b;
+  --bone:#e9e2d3; --text:#cfc7b8; --dim:#8a8276; --faint:#5a534a;
+  --blood:#a8120c; --blood2:#d4231a; --ok:#86b54d; --hazard:#d8a321;
+  --display:"Bahnschrift","Bahnschrift Condensed","Impact","Arial Narrow",sans-serif;
+  --body:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(900px 500px at 80% 0%,rgba(140,20,12,.22),transparent 60%),linear-gradient(180deg,#0d0b0a,#070606);
+  color:var(--text);font:14px/1.45 var(--body);user-select:none;overflow:hidden;display:flex;flex-direction:column;padding:26px 30px 22px}
+h1{margin:0;font:700 40px/0.95 var(--display);font-stretch:62%;letter-spacing:1px;text-transform:uppercase;color:var(--bone)}
+h1 b{color:var(--blood2)}
+.lede{margin:8px 0 18px;color:var(--dim);max-width:560px}
+.card{background:var(--panel);border:1px solid var(--line);padding:18px 20px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.label{font:700 12px var(--display);letter-spacing:2.5px;text-transform:uppercase;color:var(--dim)}
+.big{font:700 26px var(--display);font-stretch:70%;color:var(--bone);letter-spacing:.5px}
+.bar{position:relative;height:22px;margin:12px 0 10px;background:#15110f;border:1px solid var(--line2);overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,var(--blood),var(--blood2));transition:width .6s ease}
+.bar i::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,transparent 0 14px,rgba(255,255,255,.08) 14px 22px);animation:mv 1s linear infinite}
+.bar.done i{background:linear-gradient(90deg,#4d7a2a,var(--ok))}
+.bar.done i::after,.bar.idle i::after{animation:none}
+@keyframes mv{from{background-position:0 0}to{background-position:44px 0}}
+.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px;font-size:12px;color:var(--dim)}
+.meta b{display:block;color:var(--text);font-weight:600;font-size:13px}
+.msg{min-height:20px;margin-top:12px;font-size:12.5px;color:var(--hazard)}
+.msg.ok{color:var(--ok)}
+.actions{margin-top:auto;display:flex;gap:10px;justify-content:flex-end;padding-top:16px}
+button{all:unset;cursor:pointer;padding:11px 20px;font:700 14px var(--display);letter-spacing:2px;text-transform:uppercase;color:var(--bone);border:1px solid var(--line2);background:rgba(255,255,255,.03);transition:background .15s,border-color .15s}
+button:hover{background:rgba(255,255,255,.07);border-color:#5a4a40}
+button.primary{background:var(--blood);border-color:var(--blood2)}
+button.primary:hover{background:var(--blood2)}
+button[disabled]{opacity:.35;pointer-events:none}
+button:focus-visible{outline:2px solid var(--blood2);outline-offset:2px}
+.hide{display:none}
+</style>
+</head>
+<body>
+  <h1>Shader <b>Cache</b></h1>
+  <p class="lede">Loads every campaign map once and looks around, so all of the game's shaders are compiled now instead of stuttering the first time you see them in play. It takes a while (roughly 1&ndash;2 minutes per map); you can keep using your PC, and anything compiled is kept if you stop early.</p>
+
+  <div class="card">
+    <div class="row"><span class="label" id="phase">Ready</span><span class="big" id="pct">0%</span></div>
+    <div class="bar idle" id="bar"><i id="fill"></i></div>
+    <div class="meta">
+      <div>Map<b id="map">&mdash;</b></div>
+      <div>Shaders compiled<b id="pipes">0</b></div>
+      <div>Time<b id="time">0:00</b></div>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="actions">
+    <button id="startBtn" class="primary">Build cache</button>
+    <button id="cancelBtn" class="hide">Stop</button>
+    <button id="deleteBtn">Delete cache</button>
+    <button id="playBtn">Play game</button>
+    <button id="exitBtn">Exit</button>
+  </div>
+
+<script>
+const $=s=>document.querySelector(s);
+const phases={idle:'Ready',starting:'Starting the game',loading:'Loading map',looking:'Looking around',compiling:'Compiling shaders',done:'Done',failed:'Stopped',cancelled:'Stopped'};
+function fmt(t){t=Math.max(0,Math.round(t||0));const m=Math.floor(t/60),s=t%60;return m+':'+String(s).padStart(2,'0')}
+function errMsg(e){return (e&&e.message)||String(e)}
+let busy=false;
+async function poll(){
+  let st;
+  try{st=await scStatus()}catch(e){return}
+  const running=st.state==='starting'||st.state==='running';
+  busy=running;
+  const pct=Math.min(100,Math.round(st.percent||0));
+  $('#pct').textContent=pct+'%';
+  $('#fill').style.width=pct+'%';
+  $('#bar').className='bar'+(st.state==='done'?' done':st.state==='idle'?' idle':'');
+  let label=running?(phases[st.phase]||phases[st.state]||'Working'):(phases[st.state]||'Ready');
+  if(running&&st.total)label+=` — ${Math.max(st.index,1)} of ${st.total}`;
+  $('#phase').textContent=label;
+  $('#map').textContent=st.map||(st.state==='done'?'All maps':st.total?st.total+' maps':'—');
+  $('#pipes').textContent=(st.pipelines||0).toLocaleString();
+  $('#time').textContent=fmt(st.elapsed);
+  const msg=$('#msg');
+  if(st.state==='done'){msg.className='msg ok';msg.textContent='Shader cache built'+(st.cache_mb?` (${st.cache_mb.toFixed(0)} MB)`:'')+'. Play-throughs should no longer stutter on new effects.'}
+  else if(st.message){msg.className='msg';msg.textContent=st.message}
+  else if(st.state==='idle'&&st.cache_mb){msg.className='msg';msg.textContent=`Current cache: ${st.cache_mb.toFixed(0)} MB`}
+  else if(running){msg.className='msg';msg.textContent='The game window will open and play by itself. Please leave it running.'}
+  $('#startBtn').classList.toggle('hide',running);
+  $('#startBtn').textContent=st.state==='idle'?'Build cache':'Build again';
+  $('#cancelBtn').classList.toggle('hide',!running);
+  $('#deleteBtn').disabled=running;
+  $('#playBtn').disabled=running;
+}
+$('#startBtn').onclick=async()=>{try{await scStart();poll()}catch(e){$('#msg').className='msg';$('#msg').textContent=errMsg(e)}};
+$('#cancelBtn').onclick=async()=>{await scCancel();poll()};
+let confirmDel=0;
+$('#deleteBtn').onclick=async()=>{
+  if(Date.now()-confirmDel>4000){confirmDel=Date.now();$('#deleteBtn').textContent='Click again to delete';setTimeout(()=>$('#deleteBtn').textContent='Delete cache',4000);return}
+  confirmDel=0;$('#deleteBtn').textContent='Delete cache';
+  try{await scDelete();$('#msg').className='msg ok';$('#msg').textContent='Shader cache deleted. It rebuilds as you play, or press Build cache.';}
+  catch(e){$('#msg').className='msg';$('#msg').textContent=errMsg(e)}
+};
+$('#playBtn').onclick=async()=>{try{await scPlay()}catch(e){$('#msg').className='msg';$('#msg').textContent=errMsg(e)}};
+$('#exitBtn').onclick=()=>scExit();
+setInterval(poll,1000);poll();
+</script>
+</body>
+</html>

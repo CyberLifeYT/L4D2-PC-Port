@@ -13,7 +13,7 @@
 //
 // The 360 build hides many ConVars from the console (development-only flag).
 // Before a command runs, the ConVar it names is looked up in guest memory and
-// its FCVAR_DEVELOPMENTONLY / FCVAR_HIDDEN flags are cleared, so mods can use
+// its FCVAR_DEVELOPMENTONLY / FCVAR_HIDDEN / FCVAR_CHEAT flags are cleared, so mods can use
 // the same commands as on PC. Results: logs\console.txt
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -50,6 +50,9 @@ REXCVAR_DEFINE_INT32(l4d2_console_interval, 10, "L4D2 Mods",
                      "Seconds between re-applying l4d2_console_commands (0 = once)");
 REXCVAR_DEFINE_STRING(l4d2_mod_launch_options, "", "L4D2 Mods",
                       "Game command-line switches from enabled mods (e.g. -novid), added to cl");
+REXCVAR_DEFINE_BOOL(l4d2_pc_prompts, true, "L4D2 Input",
+                    "Show PC keys in on-screen prompts: registers the PC controls' keys as game key binds, which "
+                    "the game's hints look up before the controller buttons");
 REXCVAR_DEFINE_STRING(l4d2_test_commands, "", "L4D2 Debug",
                       "Automated tests: 'seconds:command|seconds:command' run once at those times");
 
@@ -128,8 +131,9 @@ bool InModules(uint32_t a, const std::vector<Region>& rs) {
   return false;
 }
 
-// Finds the ConVar named `name` and clears FCVAR_DEVELOPMENTONLY (0x2) and
-// FCVAR_HIDDEN (0x10). Layout in this build (checked on fps_max): name ptr
+// Finds the ConVar named `name` and clears FCVAR_DEVELOPMENTONLY (0x2),
+// FCVAR_HIDDEN (0x10) and FCVAR_CHEAT (0x4000; this is an offline single-
+// player port, and mods such as bot tuning use cheat-flagged variables). Layout in this build (checked on fps_max): name ptr
 // +0x0C, flags +0x14, parent +0x1C, default string +0x20.
 int Unlock(const std::string& name) {
   const auto rs = ModuleRegions();
@@ -158,7 +162,7 @@ int Unlock(const std::string& name) {
           const uint8_t* c = g_base + cv;
           const uint32_t parent = Be32(c + 0x1C), def = Be32(c + 0x20), flags = Be32(c + 0x14);
           if (parent != cv || !InModules(def, rs) || (flags & 0xF0000000)) continue;
-          const uint32_t nf = flags & ~0x12u;
+          const uint32_t nf = flags & ~0x4012u;
           if (nf != flags) {
             uint8_t* w = g_base + cv + 0x14;
             w[0] = uint8_t(nf >> 24); w[1] = uint8_t(nf >> 16); w[2] = uint8_t(nf >> 8); w[3] = uint8_t(nf);
@@ -173,6 +177,9 @@ int Unlock(const std::string& name) {
   }
   return found;
 }
+
+std::mutex g_extra_mutex;
+std::vector<std::string> g_extra;  // commands from other port code (shader cache builder)
 
 struct Queued { std::string cmd; double boost; };
 std::deque<Queued> g_queue2;
@@ -242,6 +249,42 @@ void UpdateBoost(std::vector<std::string>& cmds, std::vector<double>& boosts) {
   boosts.push_back(target);
 }
 
+// "bind <key> <command>" lines for the PC controls (l4d2_key_* settings), so
+// prompts such as "Hold %+attack% to heal" name the PC key. The game has no
+// keyboard input of its own in the 360 build, so the binds never fire.
+std::string SourceKeyName(std::string k) {
+  std::string l;
+  for (char c : k) l += char(tolower((unsigned char)c));
+  static const std::map<std::string, std::string> kMap = {
+      {"lmb", "mouse1"}, {"rmb", "mouse2"}, {"mmb", "mouse3"}, {"mouse4", "mouse4"}, {"mouse5", "mouse5"},
+      {"wheelup", "mwheelup"}, {"wheeldown", "mwheeldown"}, {"ctrl", "ctrl"}, {"shift", "shift"}, {"alt", "alt"},
+      {"space", "space"}, {"enter", "enter"}, {"tab", "tab"}, {"backspace", "backspace"}, {"up", "uparrow"},
+      {"down", "downarrow"}, {"left", "leftarrow"}, {"right", "rightarrow"}};
+  if (auto it = kMap.find(l); it != kMap.end()) return it->second;
+  if (l.size() == 1 && (isalnum((unsigned char)l[0]))) return l;
+  if (l.size() >= 2 && l[0] == 'f' && isdigit((unsigned char)l[1])) return l;
+  return "";  // Escape and anything unknown: leave alone
+}
+
+std::vector<std::string> PromptBinds() {
+  static const struct { const char* action; const char* command; } kActions[] = {
+      {"forward", "+forward"}, {"back", "+back"}, {"left", "+moveleft"}, {"right", "+moveright"},
+      {"walk", "+speed"}, {"jump", "+jump"}, {"crouch", "+duck"}, {"fire", "+attack"}, {"shove", "+attack2"},
+      {"use", "+use"}, {"reload", "+reload"}, {"zoom", "+zoom"}, {"flashlight", "impulse 100"},
+      {"switch_weapon", "lastinv"}, {"grenade", "slot3"}, {"health", "slot4"}, {"pills", "slot5"},
+      {"voice", "\"vocalize smartlook\""}, {"turn_around", "+lookspin"}, {"scoreboard", "togglescores"}};
+  std::vector<std::string> out;
+  for (const auto& a : kActions) {
+    const std::string keys = rex::cvar::GetFlagByName(std::string("l4d2_key_") + a.action);
+    for (const auto& k : Split(keys, ',')) {
+      const std::string sk = SourceKeyName(k);
+      if (sk.empty()) continue;
+      out.push_back("bind " + sk + " " + a.command);
+    }
+  }
+  return out;
+}
+
 void Worker() {
   using clock = std::chrono::steady_clock;
   const auto start = clock::now();
@@ -263,9 +306,24 @@ void Worker() {
     const int interval = REXCVAR_GET(l4d2_console_interval);
     if (now >= next_apply || cur != last) {
       if (!cur.empty()) cmds = Split(cur, ';');
+      // Re-applied with the mod commands: loading a profile runs the game's
+      // controller config, which starts with "unbindall".
+      static const bool pc = rex::cvar::GetFlagByName("l4d2_pc_controls") == "true" ||
+                             rex::cvar::GetFlagByName("l4d2_raw_mouse") == "true";
+      if (pc && REXCVAR_GET(l4d2_pc_prompts)) {
+        for (auto& b : PromptBinds()) cmds.push_back(b);
+      }
       next_apply = interval > 0 ? now + std::chrono::seconds(interval) : clock::time_point::max();
       if (cur != last) Log("commands: %s", cur.empty() ? "(none)" : cur.c_str());
       last = cur;
+    }
+    {
+      std::lock_guard<std::mutex> lock(g_extra_mutex);
+      for (auto& c : g_extra) {
+        Log("port command: %s", c.c_str());
+        cmds.push_back(c);
+      }
+      g_extra.clear();
     }
     for (auto& tc : timed) {
       if (!tc.done && t >= tc.at) {
@@ -328,6 +386,10 @@ namespace l4d2 {
 double AppliedLookBoost() { return g_applied_boost.load(); }
 void NoteMouseLook() { g_last_mouse_ms = NowMs(); }
 std::string ModLaunchOptions() { return REXCVAR_GET(l4d2_mod_launch_options); }
+void QueueGameCommand(const std::string& cmd) {
+  std::lock_guard<std::mutex> lock(g_extra_mutex);
+  g_extra.push_back(cmd);
+}
 void StartConsoleBridge() {
   if (g_running.exchange(true)) return;
   g_thread = std::thread(Worker);

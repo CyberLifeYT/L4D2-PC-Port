@@ -33,8 +33,8 @@ var SettingsSchema = []Setting{
 		Choices: [][2]string{{"-1", "Game default"}, {"0", "Off"}, {"2", "2x anisotropic"}, {"3", "4x anisotropic"}, {"4", "8x anisotropic"}, {"5", "16x anisotropic"}}},
 	{Key: "swap_post_effect", Section: "Display", Label: "Anti-aliasing (post)", Type: "choice", Default: "none",
 		Choices: [][2]string{{"none", "Off"}, {"fxaa", "FXAA"}, {"fxaa_extreme", "FXAA (extreme)"}}},
-	{Key: "video_mode_width", Section: "Display", Label: "Aspect ratio", Help: "The game renders natively at this shape (720 lines high) - wider shows more of the world; HUD and menus keep their proportions instead of stretching. Movies stay 16:9 with side bars. 21:9 is experimental: rare frames can lose the top half.", Type: "choice", Default: "1280",
-		Choices: [][2]string{{"1280", "16:9 (1280x720)"}, {"1152", "16:10 (1152x720)"}, {"1680", "21:9 ultrawide (1680x720, experimental)"}, {"960", "4:3 (960x720)"}}},
+	{Key: "video_mode_width", Section: "Display", Label: "Aspect ratio", Help: "The game renders natively at this shape - wider shows more of the world; HUD and menus keep their proportions instead of stretching. Movies stay 16:9 with side bars. Ultrawide modes use no more pixels than 16:9 (the Xbox 360's 10 MB of EDRAM must hold every frame), so combine them with Internal resolution 2x or 3x for a sharp picture.", Type: "choice", Default: "1280",
+		Choices: [][2]string{{"1280", "16:9 (1280x720)"}, {"1152", "16:10 (1152x720)"}, {"1456", "21:9 ultrawide (1456x624)"}, {"1792", "32:9 super ultrawide (1792x504)"}, {"960", "4:3 (960x720)"}}},
 	{Key: "l4d2_fps_max", Section: "Display", Label: "Frame-rate cap", Help: "The Xbox 360 version is capped at 30. Game simulation runs on a fixed tick, so higher caps only make motion smoother.", Type: "choice", Default: "60",
 		Choices: [][2]string{{"30", "30 (console)"}, {"60", "60"}, {"120", "120"}, {"144", "144"}, {"0", "Unlimited"}}},
 	{Key: "video_mode_height", Section: "Display", Type: "choice", Default: "720", Hidden: true},
@@ -160,7 +160,25 @@ func readIni(p string, into map[string]string) {
 
 // WriteSettings writes every schema key (plus any extra keys already in the
 // file, e.g. hand-added runtime settings) grouped by section.
+// aspectHeight is the native height for each aspect-ratio width: ultrawide
+// modes keep the pixel count within 16:9's (1280x720) so frames always fit
+// the console's EDRAM. 1680 is the old 21:9 value from launcher 1.1-1.2.
+func aspectHeight(width string) (string, string) {
+	switch width {
+	case "1456", "1680":
+		return "1456", "624"
+	case "1792", "2560":
+		return "1792", "504"
+	case "1152", "960", "1280":
+		return width, "720"
+	}
+	return "1280", "720"
+}
+
 func WriteSettings(installDir string, vals map[string]string) error {
+	if w, ok := vals["video_mode_width"]; ok {
+		vals["video_mode_width"], vals["video_mode_height"] = aspectHeight(w)
+	}
 	existing := map[string]string{}
 	readIni(settingsPath(installDir), existing)
 	known := map[string]bool{}
