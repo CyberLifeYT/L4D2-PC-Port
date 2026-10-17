@@ -480,3 +480,45 @@ func TestStarterModsAndCommands(t *testing.T) {
 		t.Fatalf("choice %v", c)
 	}
 }
+
+// A PC VTF built from the game's own 360 texture converts back to the same bytes.
+func TestConvertVTFRoundTrip(t *testing.T) {
+	orig, err := os.ReadFile("testdata/burger.360.vtf")
+	if err != nil {
+		t.Skip("testdata/burger.360.vtf not present (game file, not in the repo)")
+	}
+	be, le := binary.BigEndian, binary.LittleEndian
+	w, h := int(be.Uint16(orig[20:])), int(be.Uint16(orig[22:]))
+	format := int(be.Uint32(orig[48:]))
+	data := append([]byte(nil), orig[68:]...)
+	swapWords(data, swapUnit(format))
+	mips := 0
+	for s := w; s > 0; s >>= 1 {
+		mips++
+	}
+	pc := make([]byte, 80)
+	copy(pc, "VTF\x00")
+	le.PutUint32(pc[4:], 7)
+	le.PutUint32(pc[8:], 2)
+	le.PutUint32(pc[12:], 80)
+	le.PutUint16(pc[16:], uint16(w))
+	le.PutUint16(pc[18:], uint16(h))
+	le.PutUint32(pc[20:], be.Uint32(orig[16:]))
+	le.PutUint16(pc[24:], 1)
+	for i := 0; i < 4; i++ {
+		le.PutUint32(pc[32+i*4:], be.Uint32(orig[32+i*4:]))
+	}
+	le.PutUint32(pc[48:], be.Uint32(orig[44:]))
+	le.PutUint32(pc[52:], uint32(format))
+	pc[56] = byte(mips)
+	le.PutUint32(pc[57:], 0xFFFFFFFF) // no low-res image
+	le.PutUint16(pc[63:], 1)
+	pc = append(pc, data...)
+	out, err := ConvertVTF(pc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != len(orig) || !bytes.Equal(out[68:], orig[68:]) || !bytes.Equal(out[:52], orig[:52]) {
+		t.Fatalf("round trip differs: len %d vs %d", len(out), len(orig))
+	}
+}

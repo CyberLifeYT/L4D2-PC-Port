@@ -1,6 +1,7 @@
 // L4D2 PC port - screenshots and timed diagnostics captures.
 #include "capture.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -18,6 +19,8 @@
 REXCVAR_DEFINE_INT32(l4d2_autoshot, 0, "L4D2 Debug",
                      "Save a screenshot to logs\\shots every N seconds (0 = off; F12 always works)");
 REXCVAR_DEFINE_INT32(l4d2_autoshot_limit, 200, "L4D2 Debug", "Maximum automatic screenshots per session");
+REXCVAR_DEFINE_STRING(l4d2_burst, "", "L4D2 Debug",
+                      "Burst screenshots for GIFs: 'start_seconds:count:interval_ms' (files logs\\shots\\burst_*.bmp)");
 
 namespace l4d2 {
 namespace {
@@ -81,9 +84,31 @@ std::string CaptureNow(const char* tag) {
   return path.string();
 }
 
+std::thread g_burst_thread;
+
 void StartCapture(rex::ui::Presenter* presenter) {
   g_presenter = presenter;
   if (!presenter || g_thread.joinable()) return;
+  if (const std::string b = REXCVAR_GET(l4d2_burst); !b.empty()) {
+    double start = 0;
+    int count = 0, ms = 100;
+    if (sscanf(b.c_str(), "%lf:%d:%d", &start, &count, &ms) >= 2 && count > 0) {
+      g_burst_thread = std::thread([start, count, ms] {
+        const auto t0 = std::chrono::steady_clock::now();
+        auto wait_until = [&](std::chrono::steady_clock::time_point t) {
+          std::unique_lock lock(g_mutex);
+          return !g_cv.wait_until(lock, t, [] { return g_stop; });
+        };
+        if (!wait_until(t0 + std::chrono::milliseconds(int64_t(start * 1000)))) return;
+        auto next = std::chrono::steady_clock::now();
+        for (int i = 0; i < count; ++i) {
+          CaptureNow("burst");
+          next += std::chrono::milliseconds(std::max(10, ms));
+          if (!wait_until(next)) return;
+        }
+      });
+    }
+  }
   g_thread = std::thread([] {
     std::unique_lock lock(g_mutex);
     while (!g_stop) {
@@ -106,6 +131,7 @@ void StopCapture() {
   }
   g_cv.notify_all();
   if (g_thread.joinable()) g_thread.join();
+  if (g_burst_thread.joinable()) g_burst_thread.join();
   g_presenter = nullptr;
 }
 

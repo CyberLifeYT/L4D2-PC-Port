@@ -157,9 +157,33 @@ static void ApplyFpsMax(uint8_t* base) {
   if (memcmp(cv + 0x2C, v, 8) != 0) memcpy(cv + 0x2C, v, 8);
 }
 
+// engine_360 CEngineVGui (0x86F325C0, vtable 0x86B3DC44): vtable slot 2 is
+// IsGameUIVisible() -> m_pGameUI->IsGameUIActive(): true while the main menu
+// or the pause menu is up. pcinput.cpp then treats the mouse as menu input.
+constexpr uint32_t kEngineVGui = 0x86F325C0, kEngineVGuiVtbl = 0x86B3DC44, kIsGameUIVisible = 0x86DAA468;
+bool GameUIVisible(PPCContext& ctx, uint8_t* base) {
+  static PPCFunc* fn = nullptr;
+  static bool checked = false;
+  if (!checked) {
+    checked = true;
+    if (Be32(base + kEngineVGui) == kEngineVGuiVtbl && Be32(base + kEngineVGuiVtbl + 8) == kIsGameUIVisible)
+      fn = rex::runtime::ResolveIndirectFunction(kIsGameUIVisible);
+  }
+  if (!fn || Be32(base + kEngineVGui) != kEngineVGuiVtbl) return false;
+  PPCContext saved = ctx;
+  ctx.r3.u64 = kEngineVGui;
+  fn(ctx, base);
+  const bool visible = (ctx.r3.u32 & 0xFF) != 0;
+  ctx = saved;
+  return visible;
+}
+
 REX_HOOK_RAW(sub_83513798) {
   static BaseFn set_base = Export<BaseFn>("L4d2SetGuestBase");
   static EditFn edit = Export<EditFn>("L4d2PcEditPadState");
+  using MenuFn = void (*)(int);
+  static MenuFn set_menu = Export<MenuFn>("L4d2SetMenuActive");
+  if (set_menu && ctx.r3.u32 == 0) set_menu(GameUIVisible(ctx, base) ? 1 : 0);
   static bool once = [&] { if (set_base) set_base(base); return true; }();
   (void)once;
   DumpImages(base);

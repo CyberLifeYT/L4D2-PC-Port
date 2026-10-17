@@ -22,3 +22,6 @@ port/src/stubs_backup/
 *.lib
 *.zip
 launcher/build/
+
+# Game files used by local tests (never commit game data)
+launcher/testdata/

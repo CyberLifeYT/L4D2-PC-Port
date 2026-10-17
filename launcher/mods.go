@@ -314,6 +314,10 @@ func AddMod(install, src string) (string, error) {
 		// A single file (for example zip0.360.zip or a .bsp): put it at the mod root.
 		cerr = copyFile(src, filepath.Join(dst, filepath.Base(src)))
 	}
+	if cerr == nil {
+		// PC addon textures become .360.vtf; see conversion_report.txt.
+		_, cerr = ConvertModAssets(dst)
+	}
 	if cerr != nil {
 		os.RemoveAll(dst)
 		return "", cerr

@@ -67,6 +67,8 @@ REXCVAR_DEFINE_DOUBLE(l4d2_mouse_turn_boost, 3.0, "L4D2 Input",
                       "mapping divided by it), so fast flicks are not capped by the stick's top turn speed");
 REXCVAR_DEFINE_DOUBLE(l4d2_mouse_counts_full, 2400.0, "L4D2 Input",
                       "Mouse counts per second that equal a full stick deflection at sensitivity 1");
+REXCVAR_DEFINE_BOOL(l4d2_menu_mouse, true, "L4D2 Input",
+                    "In menus the mouse wheel moves the selection, left click selects and right click goes back");
 REXCVAR_DEFINE_BOOL(l4d2_crouch_hold, true, "L4D2 Input",
                     "Crouch while the crouch key is held (the game's own LB crouch is a toggle); false = press to toggle");
 REXCVAR_DEFINE_DOUBLE(l4d2_walk_speed, 0.45, "L4D2 Input", "Stick deflection used while the walk key is held");
@@ -122,6 +124,8 @@ void NoteMouseLook();       // console.cpp
 namespace {
 
 using rex::ui::VirtualKey;
+
+std::atomic<bool> g_menu_active{false};  // the game's menu UI is up (inputsystem hook)
 
 // XINPUT_GAMEPAD_* bits.
 enum : uint16_t {
@@ -282,6 +286,16 @@ class PcInput final : public rex::ui::WindowInputListener {
       }
     }
     binds_lock.unlock();
+    // Menus: the mouse becomes menu input - wheel moves the selection, left
+    // click selects (A), right click goes back (B) - and does not aim or fire.
+    const bool menu = g_menu_active.load() && REXCVAR_GET(l4d2_menu_mouse);
+    if (menu) {
+      if (down[0x01]) { buttons |= kA; rt = false; }
+      if (down[0x02]) { buttons |= kB; lt = false; }
+      if (down[kWheelUp]) { buttons = uint16_t((buttons | kDUp) & ~kY); }
+      if (down[kWheelDown]) { buttons = uint16_t((buttons | kDDown) & ~kY); }
+      dx = dy = 0;
+    }
     // The game's crouch (LB, toggle_duck) toggles on each press. For a held
     // key, tap it when the key goes down and again when it comes up.
     if (REXCVAR_GET(l4d2_crouch_hold)) {
@@ -752,3 +766,6 @@ extern "C" __declspec(dllexport) int L4d2FpsMax() { return REXCVAR_GET(l4d2_fps_
 REXCVAR_DEFINE_INT32(l4d2_fov, 0, "L4D2 Display", "Field of view in degrees (0 = game default, 90)");
 
 extern "C" __declspec(dllexport) int L4d2FovOverride() { return REXCVAR_GET(l4d2_fov); }
+
+// Called by the inputsystem hook on every pad-0 poll.
+extern "C" __declspec(dllexport) void L4d2SetMenuActive(int active) { g_menu_active = active != 0; }
